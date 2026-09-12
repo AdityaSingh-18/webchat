@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import {EllipsisVertical, MessageSquarePlus, Search} from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+
+import {EllipsisVertical, LogOut, MessageSquarePlus, Search} from "lucide-react";
 
 const ChatFilters = [
   { id: "all", label: "All" },
@@ -86,8 +88,50 @@ const chatsData = [
 ]
 
 export const ChatList = () => {
+  const router = useRouter();
+  
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeChat, setActiveChat] = useState("1");
+  const [isOptionsVisible, setIsOptionVisible] = useState(false);
+  
+  const optionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        optionsRef.current &&
+        !optionsRef.current.contains(event.target as Node)
+      ) {
+        setIsOptionVisible(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(data.error);
+        return;
+      }
+
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   return (
     <div className="w-80 h-screen flex flex-col gap-4 shrink-0 pt-4 bg-[#0d1927] border-x-2 border-gray-800">
@@ -96,8 +140,38 @@ export const ChatList = () => {
           WebChat
         </h1>
         <div className="flex flex-row items-center gap-1">
-          <div className="text-white cursor-pointer p-2 rounded-full hover:bg-white/5 hover:text-white transition">
-            <EllipsisVertical size={22} />
+          <div ref={optionsRef} className="relative">
+            <button
+              onClick={() => setIsOptionVisible(!isOptionsVisible)}
+              className="text-white cursor-pointer p-2 rounded-full hover:bg-white/5 hover:text-white transition"
+            >
+              <EllipsisVertical size={22} />
+            </button>
+            {isOptionsVisible && (
+              <div className="absolute left-0 top-12 z-50 w-50 rounded-xl bg-[#162235] border border-gray-700 shadow-lg shadow-white/5 p-1">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  <LogOut size={17} />
+                  Logout
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  <LogOut size={17} />
+                  Logout
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  <LogOut size={17} />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
           <div className="text-white cursor-pointer bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] p-3 rounded-full 
             hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-transform">
@@ -123,7 +197,8 @@ export const ChatList = () => {
             <div 
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
-              className={`px-2 py-1 rounded-lg text-sm cursor-pointer font-medium transition-all duration-200 border border-gray-800 hover:shadow-[0_0_8px_1px_rgba(255,255,255,0.4)]
+              className={`px-2 py-1 text-sm cursor-pointer font-medium rounded-lg border border-gray-800 transition-all duration-200
+                hover:shadow-[0_0_8px_1px_rgba(255,255,255,0.4)]
                 ${isActive 
                   ? "text-white bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]" 
                   : "hover:bg-white/5 hover:text-gray-200 text-gray-300"

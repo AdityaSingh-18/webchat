@@ -22,7 +22,7 @@ export const Sidebar = () => {
   const [activeTab, setActiveTab] = useState<Tabs>("chat");
 
   return (
-    <div className="w-20 px-2 py-4 flex flex-col items-center gap-4 bg-[#0a1220] h-screen">
+    <div className="px-2 py-4 flex flex-col items-center gap-4 bg-[#0a1220] h-screen">
       {TabOptions.map((tab, index) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
