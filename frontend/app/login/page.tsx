@@ -39,7 +39,9 @@ export default function page () {
 
   return (
     <div className="flex items-center justify-center h-screen overflow-y-auto">
-      <img src="./images/background.png" alt="background" className="w-screen max-h-screen z-0 absolute"/>
+      <div className="absolute z-0 w-full h-screen">
+        <img src="./images/background.png" alt="background" className="h-full w-full object-cover"/>
+      </div>
       <div className="relative text-white max-w-xs md:max-w-sm rounded-lg">
         <div className="flex items-center justify-center gap-3 mb-4">
           <img src="./Logo.svg" alt="webchat logo" className="w-20 h-20 drop-shadow-[0_0_16px_#c568f5]"/>

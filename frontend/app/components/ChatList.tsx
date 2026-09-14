@@ -173,9 +173,17 @@ export const ChatList = () => {
               </div>
             )}
           </div>
-          <div className="text-white cursor-pointer bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] p-3 rounded-full 
-            hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-transform">
-            <MessageSquarePlus size={22} />
+          <div className="group relative">
+            <button 
+              className="text-white cursor-pointer bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] p-3 rounded-full 
+                hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-transform">
+              <MessageSquarePlus size={22} />
+            </button>
+            <span className="pointer-events-none absolute z-10 top-full right-0 mt-2 whitespace-nowrap rounded-md 
+              bg-black px-3 py-1 text-sm text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            >
+              New Chat
+            </span>
           </div>
         </div>
       </div>
@@ -186,7 +194,8 @@ export const ChatList = () => {
         />
         <input
           type="text"
-          className="w-full rounded-xl h-10 border border-gray-700 bg-gray-800 outline-none focus:bg-gray-700 text-white pl-9 pr-3 text-[15px] placeholder:text-gray-400 transition-colors"
+          className="w-full rounded-xl h-10 border border-gray-700 bg-gray-800 outline-none focus:bg-gray-700 text-white 
+            pl-9 pr-3 text-[15px] placeholder:text-gray-400 transition-colors"
           placeholder="Search or start a new chat"
         />
       </div>
