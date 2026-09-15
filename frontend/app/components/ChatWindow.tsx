@@ -209,20 +209,20 @@ export const ChatWindow = () => {
           <div className="border border-slate-800" />
           <div className="flex flex-col justify-center pb-4">
             <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <CircleMinus size={22} className="text-red-500" strokeWidth={2} />
-              <p className="text-red-500 text-sm truncate">
+              <CircleMinus size={22} className="text-red-600" strokeWidth={2} />
+              <p className="text-red-600 text-sm truncate">
                 Clear Chat
               </p>
             </div>
             <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <Ban size={22} className="text-red-500" strokeWidth={2} />
-              <p className="text-red-500 text-sm truncate">
+              <Ban size={22} className="text-red-600" strokeWidth={2} />
+              <p className="text-red-600 text-sm truncate">
                 Block {UserData.name}
               </p>
             </div>
             <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <Trash size={22} className="text-red-500" strokeWidth={2} />
-              <p className="text-red-500 text-sm truncate">
+              <Trash size={22} className="text-red-600" strokeWidth={2} />
+              <p className="text-red-600 text-sm truncate">
                 Delete Contact
               </p>
             </div>

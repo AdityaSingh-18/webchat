@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useChatStore, type Tabs } from "@/lib/store/chatStore";
 import {
   MessageSquare,
   Users,
@@ -10,12 +10,6 @@ import {
   LucideIcon,
 } from "lucide-react";
 
-type Tabs =
-  | "chat"
-  | "group"
-  | "requests"
-  | "starred"
-  | "settings";
 
 interface TabItem {
   id: Tabs;
@@ -32,9 +26,21 @@ const TabOptions: TabItem[] = [
 ];
 
 export const Sidebar = () => {
-  const [activeTab, setActiveTab] = useState<Tabs>("chat");
+  const activeTab = useChatStore((state) => state.activeTab);
+  const setActiveTab = useChatStore((state) => state.setActiveTab);
+  const setRequestOpen = useChatStore((state) => state.setRequestOpen);
 
   const pendingRequestCount = 3;
+
+  const handleTabClick = (id: Tabs) => {
+    if(id === "requests") {
+      setRequestOpen(true);
+    }
+    else {
+      setRequestOpen(false);
+    }
+    setActiveTab(id);
+  }
 
   return (
     <div className="px-2 py-4 flex flex-col items-center gap-4 bg-[#0a1220] h-screen">
@@ -45,7 +51,7 @@ export const Sidebar = () => {
         return (
           <button 
             key={index}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabClick(tab.id)}
             className={`group flex flex-col items-center justify-center cursor-pointer ${isActive ? "gap-2" : ""}`}
           >
             <div className={`relative w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-200 group-hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]
