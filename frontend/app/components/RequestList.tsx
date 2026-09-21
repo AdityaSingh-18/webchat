@@ -57,7 +57,6 @@ const sentRequest = [
 export const RequestList = () => {
   const [activeRequestTab, setActiveRequestTab] = useState<Requests>("received");
 
-  const setRequestOpen = useChatStore((state) => state.setRequestOpen);
   const setActiveTab = useChatStore((state) => state.setActiveTab);
 
   return (
@@ -65,10 +64,7 @@ export const RequestList = () => {
       <div className="flex items-center gap-2 px-2">
         <div className="group relative">
           <div 
-            onClick={() => {
-              setRequestOpen(false);
-              setActiveTab("chat");
-            }} 
+            onClick={() => setActiveTab("chat")} 
             className="hover:bg-white/5 text-gray-300 hover:text-white p-2 cursor-pointer rounded-full"
           >
             <ArrowLeft size={22} />

@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Calendar, CalendarIcon, ChevronRight, CircleMinus, Folders, Info, Mail, Phone, Plus, Star, StopCircle, Trash, Users, X } from "lucide-react";
+import { Ban, Calendar, ChevronRight, CircleMinus, Folders, Info, Mail, Phone, Plus, Star, Trash, Users, X } from "lucide-react";
 
 const UserData = {
   id: "2",
   name: "Aditya Singh",
   email: "adityasingh@gmail.com",
   phoneNumber: "1234567890",
-  connectDate: "02 Septemeber, 2026",
+  connectDate: "02 September, 2026",
   mediaCount: "3",
   starredCount: "4",
   commonGroupsCount: "1",
@@ -121,13 +121,8 @@ export const ChatWindow = () => {
         </div>
       </div>
       {showDetails && 
-        <div className="w-80 h-screen overflow-y-auto flex flex-col gap-4 px-4 shrink-0 text-white bg-slate-900 border-l-2 border-gray-800
-          [&::-webkit-scrollbar]:w-[6px]
-          [&::-webkit-scrollbar-track]:bg-transparent
-          [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
-        >
-          <div className="flex items-center justify-between gap-4 py-4 border-b border-gray-800">
+        <div className="w-80 h-screen flex flex-col shrink-0 text-white bg-slate-900 border-l-2 border-gray-800">
+          <div className="flex items-center justify-between gap-4 shrink-0 p-4 border-b border-gray-800">
             <p className="text-xl">
               User Info
             </p>
@@ -135,96 +130,103 @@ export const ChatWindow = () => {
               <X size={22} strokeWidth={2}/>
             </button>
           </div>
-          <div className="flex flex-col items-center justify-center">
-            <img src={UserData.img} alt={UserData.name} className="h-24 w-24 rounded-full" />
-            <p className="font-semibold text-lg text-white mt-2">
-              {UserData.name}
-            </p>
-            <p className="text-sm truncate text-green-400">
-              {UserData.online ? "Online" : ""}
-            </p>
-          </div>
-          <div className="flex flex-col justify-center gap-3 p-4">
-            <div className="flex gap-4 items-center">
-              <Mail size={22} className="text-cyan-500" strokeWidth={2} />
-              <div className="flex flex-col">
-                <h3 className="text-[13px] text-gray-400">Email</h3>
-                <p className="text-sm text-gray-300">{UserData.email}</p>
-              </div>
-            </div>
-            <div className="flex gap-4 items-center">
-              <Phone size={22} className="text-cyan-500" strokeWidth={2} />
-              <div className="flex flex-col">
-                <h3 className="text-[13px] text-gray-400">Phone Number</h3>
-                <p className="text-sm text-gray-300">{UserData.phoneNumber}</p>
-              </div>
-            </div>
-            <div className="flex gap-4 items-center">
-              <CalendarIcon size={22} className="text-cyan-500" strokeWidth={2} />
-              <div className="flex flex-col">
-                <h3 className="text-[13px] text-gray-400">Connected Since</h3>
-                <p className="text-sm text-gray-300">{UserData.connectDate}</p>
-              </div>
-            </div>
-          </div>
-          <div className="border border-slate-800" />
-          <div className="flex flex-col justify-center">
-            <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
-              <div className="flex gap-4 items-center">
-                <Folders size={22} className="text-indigo-500" strokeWidth={2} />
-                <p className="text-gray-300 text-sm truncate">
-                  Media, Docs and Links
-                </p>
-              </div>
-              <div className="flex gap-1 items-center">
-                <p className="text-sm text-gray-300">{UserData.mediaCount}</p>
-                <ChevronRight size={20} className="text-indigo-500"/>
-              </div>
-            </div>
-            <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
-              <div className="flex gap-4 items-center">
-                <Star size={22} className="text-indigo-500" strokeWidth={2} />
-                <p className="text-gray-300 text-sm truncate">
-                  Starrd Messages
-                </p>
-              </div>
-              <div className="flex gap-1 items-center">
-                <p className="text-sm text-gray-300">{UserData.starredCount}</p>
-                <ChevronRight size={22} className="text-indigo-500"/>
-              </div>
-            </div>
-            <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
-              <div className="flex gap-4 items-center">
-                <Users size={22} className="text-indigo-500" strokeWidth={2} />
-                <p className="text-gray-300 text-sm truncate">
-                  Groups in common
-                </p>
-              </div>
-              <div className="flex gap-1 items-center">
-                <p className="text-sm text-gray-300">{UserData.commonGroupsCount}</p>
-                <ChevronRight size={22} className="text-indigo-500"/>
-              </div>
-            </div>
-          </div>
-          <div className="border border-slate-800" />
-          <div className="flex flex-col justify-center pb-4">
-            <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <CircleMinus size={22} className="text-red-600" strokeWidth={2} />
-              <p className="text-red-600 text-sm truncate">
-                Clear Chat
+          <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4
+            [&::-webkit-scrollbar]:w-[6px]
+            [&::-webkit-scrollbar-track]:bg-transparent
+            [&::-webkit-scrollbar-thumb]:rounded-full
+            [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
+          >
+            <div className="flex flex-col items-center justify-center">
+              <img src={UserData.img} alt={UserData.name} className="h-24 w-24 object-cover rounded-full" />
+              <p className="font-semibold text-lg text-white mt-2">
+                {UserData.name}
+              </p>
+              <p className="text-sm truncate text-green-400">
+                {UserData.online ? "Online" : ""}
               </p>
             </div>
-            <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <Ban size={22} className="text-red-600" strokeWidth={2} />
-              <p className="text-red-600 text-sm truncate">
-                Block {UserData.name}
-              </p>
+            <div className="flex flex-col justify-center gap-3 p-4">
+              <div className="flex gap-4 items-center">
+                <Mail size={22} className="text-cyan-500" strokeWidth={2} />
+                <div className="flex flex-col">
+                  <h3 className="text-[13px] text-gray-400">Email</h3>
+                  <p className="text-sm text-gray-300">{UserData.email}</p>
+                </div>
+              </div>
+              <div className="flex gap-4 items-center">
+                <Phone size={22} className="text-cyan-500" strokeWidth={2} />
+                <div className="flex flex-col">
+                  <h3 className="text-[13px] text-gray-400">Phone Number</h3>
+                  <p className="text-sm text-gray-300">{UserData.phoneNumber}</p>
+                </div>
+              </div>
+              <div className="flex gap-4 items-center">
+                <Calendar size={22} className="text-cyan-500" strokeWidth={2} />
+                <div className="flex flex-col">
+                  <h3 className="text-[13px] text-gray-400">Connected Since</h3>
+                  <p className="text-sm text-gray-300">{UserData.connectDate}</p>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-              <Trash size={22} className="text-red-600" strokeWidth={2} />
-              <p className="text-red-600 text-sm truncate">
-                Delete Contact
-              </p>
+            <div className="border border-slate-800" />
+            <div className="flex flex-col justify-center">
+              <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+                <div className="flex gap-4 items-center">
+                  <Folders size={22} className="text-indigo-500" strokeWidth={2} />
+                  <p className="text-gray-300 text-sm truncate">
+                    Media, Docs and Links
+                  </p>
+                </div>
+                <div className="flex gap-1 items-center">
+                  <p className="text-sm text-gray-300">{UserData.mediaCount}</p>
+                  <ChevronRight size={20} className="text-indigo-500"/>
+                </div>
+              </div>
+              <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+                <div className="flex gap-4 items-center">
+                  <Star size={22} className="text-indigo-500" strokeWidth={2} />
+                  <p className="text-gray-300 text-sm truncate">
+                    Starrd Messages
+                  </p>
+                </div>
+                <div className="flex gap-1 items-center">
+                  <p className="text-sm text-gray-300">{UserData.starredCount}</p>
+                  <ChevronRight size={22} className="text-indigo-500"/>
+                </div>
+              </div>
+              <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+                <div className="flex gap-4 items-center">
+                  <Users size={22} className="text-indigo-500" strokeWidth={2} />
+                  <p className="text-gray-300 text-sm truncate">
+                    Groups in common
+                  </p>
+                </div>
+                <div className="flex gap-1 items-center">
+                  <p className="text-sm text-gray-300">{UserData.commonGroupsCount}</p>
+                  <ChevronRight size={22} className="text-indigo-500"/>
+                </div>
+              </div>
+            </div>
+            <div className="border border-slate-800" />
+            <div className="flex flex-col justify-center pb-4">
+              <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
+                <CircleMinus size={22} className="text-red-600" strokeWidth={2} />
+                <p className="text-red-600 text-sm truncate">
+                  Clear Chat
+                </p>
+              </div>
+              <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
+                <Ban size={22} className="text-red-600" strokeWidth={2} />
+                <p className="text-red-600 text-sm truncate">
+                  Block {UserData.name}
+                </p>
+              </div>
+              <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
+                <Trash size={22} className="text-red-600" strokeWidth={2} />
+                <p className="text-red-600 text-sm truncate">
+                  Delete Contact
+                </p>
+              </div>
             </div>
           </div>
         </div>

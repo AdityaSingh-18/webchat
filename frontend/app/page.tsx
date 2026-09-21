@@ -4,15 +4,28 @@ import { Sidebar } from "./components/Sidebar";
 import { ChatList } from "./components/ChatList";
 import { ChatWindow } from "./components/ChatWindow";
 import { RequestList } from "./components/RequestList";
-import { useChatStore } from "./lib/store/chatStore";
+import { Settings } from "./components/Settings";
+import { Profile } from "./components/Profile";
+import { useChatStore, type Tabs } from "./lib/store/chatStore";
+
+const ActivePanelMap: Record<Tabs, React.ElementType> = {
+  chat: ChatList,
+  requests: RequestList,
+  settings: Settings,
+  group: ChatList, 
+  starred: ChatList, 
+  profile: Profile,
+};
 
 export default function Home() {
-  const requestOpen = useChatStore((state) => state.requestOpen);
+  const activeTab = useChatStore((state) => state.activeTab);
+
+  const ActiveMiddlePanel = ActivePanelMap[activeTab];
 
   return (
-    <div className="flex flex-row">
+    <div className="flex flex-row h-screen">
       <Sidebar />
-      {requestOpen ? <RequestList /> : <ChatList />}
+      <ActiveMiddlePanel />
       <ChatWindow />
     </div>
   );

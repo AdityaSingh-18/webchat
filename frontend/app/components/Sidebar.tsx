@@ -10,7 +10,6 @@ import {
   LucideIcon,
 } from "lucide-react";
 
-
 interface TabItem {
   id: Tabs;
   label: string;
@@ -28,17 +27,10 @@ const TabOptions: TabItem[] = [
 export const Sidebar = () => {
   const activeTab = useChatStore((state) => state.activeTab);
   const setActiveTab = useChatStore((state) => state.setActiveTab);
-  const setRequestOpen = useChatStore((state) => state.setRequestOpen);
 
   const pendingRequestCount = 3;
 
   const handleTabClick = (id: Tabs) => {
-    if(id === "requests") {
-      setRequestOpen(true);
-    }
-    else {
-      setRequestOpen(false);
-    }
     setActiveTab(id);
   }
 
@@ -84,6 +76,7 @@ export const Sidebar = () => {
           <img
             src="./post1.jpg"
             alt="profile photo"
+            onClick={() => handleTabClick("profile")}
             className="h-12 w-12 cursor-pointer rounded-full object-cover"
           />
 
