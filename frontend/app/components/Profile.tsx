@@ -3,24 +3,9 @@
 import { useChatStore } from "@/lib/store/chatStore";
 import { ArrowLeft, Mail, Phone, Calendar, AtSign } from "lucide-react";
 
-const UserData = {
-  id: "2",
-  name: "Aditya Singh",
-  email: "adityasingh@gmail.com",
-  phoneNumber: "1234567890",
-  connectDate: "02 September, 2026",
-  mediaCount: "3",
-  starredCount: "4",
-  commonGroupsCount: "1",
-  img: "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=461&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-  lastChat: "10:00 AM",
-  message: "Hello bro kaise ho?",
-  messageCount: "2",
-  online: true,
-};
-
 export const Profile = () => {
   const setActiveTab = useChatStore((state) => state.setActiveTab);
+  const currentUser = useChatStore((state) => state.currentUser);
 
   return (
     <div className="w-80 h-screen flex flex-col gap-4 shrink-0 pt-4 bg-[#0d1927] border-x-2 border-gray-800">
@@ -55,15 +40,13 @@ export const Profile = () => {
         <div className="flex flex-col items-center justify-center px-4">
           <div className="relative">
             <img 
-              src={UserData.img} 
-              alt={UserData.name} 
-              className="h-28 w-28 rounded-full object-cover ring-4 ring-emerald-500/20 border-2 border-emerald-500 p-1" 
+              src={currentUser?.avatar_url || "./post1.jpg"} 
+              alt={currentUser?.full_name || "Profile Photo"} 
+              className="h-32 w-32 rounded-full object-cover ring-4 ring-emerald-500/20 border-3 border-emerald-500 p-1" 
             />
-            {UserData.online && (
-              <div className="absolute bottom-2 right-2 h-5 w-5 bg-emerald-500 rounded-full border-4 border-[#0d1927]\"></div>
-            )}
+              <div className="absolute bottom-2.5 right-2.5 h-5 w-5 bg-emerald-500 rounded-full border-4 border-[#0d1927]\"></div>
           </div>
-          <h2 className="text-[22px] text-white font-semibold my-2 tracking-wide">{UserData.name}</h2>
+          <h2 className="text-[22px] text-white font-semibold my-2 tracking-wide">{currentUser?.full_name}</h2>
         </div>
 
         <div>
@@ -74,21 +57,27 @@ export const Profile = () => {
               <Mail size={22} className="text-cyan-500" strokeWidth={2} />
               <div className="flex flex-col">
                 <h3 className="text-[13px] text-gray-400">Email</h3>
-                <p className="text-sm text-gray-300">{UserData.email}</p>
+                <p className="text-sm text-gray-300">{currentUser?.email}</p>
               </div>
             </div>
             <div className="flex gap-4 items-center">
               <Phone size={22} className="text-cyan-500" strokeWidth={2} />
               <div className="flex flex-col">
                 <h3 className="text-[13px] text-gray-400">Phone Number</h3>
-                <p className="text-sm text-gray-300">{UserData.phoneNumber}</p>
+                <p className="text-sm text-gray-300">{currentUser?.phone_number}</p>
               </div>
             </div>
             <div className="flex gap-4 items-center">
               <Calendar size={22} className="text-cyan-500" strokeWidth={2} />
               <div className="flex flex-col">
                 <h3 className="text-[13px] text-gray-400">Connected Since</h3>
-                <p className="text-sm text-gray-300">{UserData.connectDate}</p>
+                <p className="text-sm text-gray-300">
+                  {new Date(currentUser!.created_at).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
               </div>
             </div>
           </div>
@@ -103,7 +92,6 @@ export const Profile = () => {
           Edit Profile
         </button>
       </div>
-
     </div>
   );
 };

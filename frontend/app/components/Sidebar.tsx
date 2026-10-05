@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useChatStore, type Tabs } from "@/lib/store/chatStore";
+import { supabase } from "@/lib/supabase/supabaseClient";
 import {
   MessageSquare,
   Users,
@@ -25,14 +27,53 @@ const TabOptions: TabItem[] = [
 ];
 
 export const Sidebar = () => {
+  const currentUser = useChatStore((state) => state.currentUser);
   const activeTab = useChatStore((state) => state.activeTab);
   const setActiveTab = useChatStore((state) => state.setActiveTab);
 
-  const pendingRequestCount = 3;
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
   const handleTabClick = (id: Tabs) => {
     setActiveTab(id);
   }
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchPendingCount = async () => {
+      const { count, error } = await supabase
+        .from("connections")
+        .select("*", { count: "exact", head: true })
+        .eq("contact_id", currentUser.id)
+        .eq("status", "pending");
+
+      if (!error && count !== null) {
+        setPendingRequestCount(count);
+      }
+    };
+
+    fetchPendingCount();
+
+    const channel = supabase
+      .channel("realtime_pending_requests")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "connections",
+          filter: `contact_id=eq.${currentUser.id}`,
+        },
+        () => {
+          fetchPendingCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
 
   return (
     <div className="px-2 py-4 flex flex-col items-center gap-4 bg-[#0a1220] h-screen">
@@ -65,7 +106,9 @@ export const Sidebar = () => {
                 </span>
               )}
             </div>
-            <div className={`text-sm font-medium transition-all duration-200 group-hover:text-white ${isActive ? "text-white" : "text-slate-400"}`}>
+            <div className={`text-sm font-medium transition-all duration-200 group-hover:text-white 
+              ${isActive ? "text-white" : "text-slate-400"}`}
+            >
               {tab.label}
             </div>
           </button>
@@ -74,16 +117,15 @@ export const Sidebar = () => {
       <div className="mt-auto">
         <div className="group relative">
           <img
-            src="./post1.jpg"
-            alt="profile photo"
+            src={currentUser?.avatar_url || "./post1.jpg"}
+            alt={`${currentUser?.full_name}'s profile`}
             onClick={() => handleTabClick("profile")}
             className="h-12 w-12 cursor-pointer rounded-full object-cover"
           />
 
           <span className="pointer-events-none absolute bottom-full left-1/2 mb-2
             -translate-x-1/2 whitespace-nowrap rounded-md bg-black px-3 py-1
-            text-sm text-white opacity-0 transition-opacity duration-200
-            group-hover:opacity-100"
+            text-sm text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
           >
             You
           </span>
