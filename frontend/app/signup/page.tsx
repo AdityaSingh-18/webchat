@@ -50,8 +50,8 @@ export default function page () {
         return;
       }
 
-      toast.success("Registered Successfully!");
-      router.push("/login");
+      toast.success("Verification code sent to your email!");
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (error) {
       toast.error("Something went wrong. Please try again.");
     }
