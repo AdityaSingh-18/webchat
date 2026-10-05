@@ -5,12 +5,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const { fullname, email, password } = body;
+    const {fullname, username, email, phoneNumber, password} = body;
 
-    if (!fullname || !email || !password) {
+    if (!fullname || !username || !email || !phoneNumber || !password) {
       return NextResponse.json(
         {
-          error: "Full name, email and password are required",
+          error: "Please fill the form before creating account",
         },
         { status: 400 }
       );
@@ -33,6 +33,8 @@ export async function POST(request: Request) {
       options: {
         data: {
           full_name: fullname,
+          username: username.trim(),
+          phone_number: phoneNumber.trim(),
         },
       },
     });

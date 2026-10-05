@@ -63,7 +63,7 @@ export const Profile = () => {
               <div className="absolute bottom-2 right-2 h-5 w-5 bg-emerald-500 rounded-full border-4 border-[#0d1927]\"></div>
             )}
           </div>
-          <h2 className="text-[22px] text-white font-semibold mt-4 tracking-wide">{UserData.name}</h2>
+          <h2 className="text-[22px] text-white font-semibold my-2 tracking-wide">{UserData.name}</h2>
         </div>
 
         <div>
@@ -98,7 +98,7 @@ export const Profile = () => {
       <div className="p-4 border-t border-slate-800">
         <button 
           onClick={() => setActiveTab("settings")}
-          className="w-full text-white cursor-pointer font-semibold bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] p-3 rounded-xl"
+          className="w-full text-white cursor-pointer font-semibold bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] px-3 py-2.5 rounded-lg"
         >
           Edit Profile
         </button>

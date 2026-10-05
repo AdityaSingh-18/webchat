@@ -101,7 +101,7 @@ export const Settings = () => {
         <button 
           onClick={handleSave}
           disabled={!fullName || !isEditing}
-          className="text-white cursor-pointer font-semibold bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] p-3 rounded-xl disabled:cursor-not-allowed disabled:opacity-90">
+          className="text-white cursor-pointer font-semibold bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] px-3 py-2.5 rounded-lg disabled:cursor-not-allowed disabled:opacity-90">
           Save Changes
         </button>
       </div>

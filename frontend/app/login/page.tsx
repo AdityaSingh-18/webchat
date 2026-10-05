@@ -3,6 +3,7 @@
 import { useState, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
 import { EyeIcon, EyeOffIcon, LockKeyhole, Mail } from "lucide-react";
 
@@ -31,6 +32,7 @@ export default function page () {
 
     if (!response.ok) {
       console.log(data.error);
+      toast.error(data.error || "Invalid login credentials");
       return;
     }
 
@@ -42,8 +44,9 @@ export default function page () {
       <div className="absolute z-0 w-full h-screen">
         <img src="./images/background.png" alt="background" className="h-full w-full object-cover"/>
       </div>
-      <div className="relative text-white max-w-xs md:max-w-sm rounded-lg">
-        <div className="flex items-center justify-center gap-3 mb-4">
+
+      <div className="relative text-white max-w-xs md:max-w-sm">
+        <div className="flex items-center justify-center gap-2 mb-4">
           <img src="./Logo.svg" alt="webchat logo" className="w-20 h-20 drop-shadow-[0_0_16px_#c568f5]"/>
           <span className="text-5xl font-semibold bg-gradient-to-br from-[#c568f5] via-[#68a8ff] to-[#4ee7e8] 
             bg-clip-text text-transparent [text-shadow:0_0_30px_#4ee7e8]"
@@ -77,6 +80,7 @@ export default function page () {
               />
             </div>
           </div>
+          
           <div className="mx-auto bg-gray-800/70 flex items-center gap-4 border-2 border-gray-800 rounded-xl px-4 py-1 mb-3">
             <LockKeyhole size={22} className="text-cyan-500"/>
             <div className="flex-1 flex flex-col">

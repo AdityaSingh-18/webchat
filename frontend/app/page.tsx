@@ -1,12 +1,12 @@
 "use client";
 
-import { Sidebar } from "./components/Sidebar";
-import { ChatList } from "./components/ChatList";
-import { ChatWindow } from "./components/ChatWindow";
-import { RequestList } from "./components/RequestList";
-import { Settings } from "./components/Settings";
-import { Profile } from "./components/Profile";
-import { useChatStore, type Tabs } from "./lib/store/chatStore";
+import { Sidebar } from "@/components/Sidebar";
+import { ChatList } from "@/components/ChatList";
+import { ChatWindow } from "@/components/ChatWindow";
+import { RequestList } from "@/components/RequestList";
+import { Settings } from "@/components/Settings";
+import { Profile } from "@/components/Profile";
+import { useChatStore, type Tabs } from "@/lib/store/chatStore";
 
 const ActivePanelMap: Record<Tabs, React.ElementType> = {
   chat: ChatList,
