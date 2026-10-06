@@ -7,26 +7,31 @@ import { RequestList } from "@/components/RequestList";
 import { Settings } from "@/components/Settings";
 import { Profile } from "@/components/Profile";
 import { useChatStore, type Tabs } from "@/lib/store/chatStore";
-
-const ActivePanelMap: Record<Tabs, React.ElementType> = {
-  chat: ChatList,
-  requests: RequestList,
-  settings: Settings,
-  group: ChatList, 
-  starred: ChatList, 
-  profile: Profile,
-};
+import { useState } from "react";
 
 export default function Home() {
   const activeTab = useChatStore((state) => state.activeTab);
 
-  const ActiveMiddlePanel = ActivePanelMap[activeTab];
+  const [activeChat, setActiveChat] = useState<string | null>(null);
 
   return (
     <div className="flex flex-row h-screen">
       <Sidebar />
-      <ActiveMiddlePanel />
-      <ChatWindow />
+
+      {(activeTab === "chat" ||
+        activeTab === "group" ||
+        activeTab === "starred") && (
+        <ChatList
+          activeChat={activeChat}
+          onSelectChat={setActiveChat}
+        />
+      )}
+
+      {activeTab === "requests" && <RequestList />}
+      {activeTab === "settings" && <Settings />}
+      {activeTab === "profile" && <Profile />}
+
+      <ChatWindow userId={activeChat} />
     </div>
   );
 }

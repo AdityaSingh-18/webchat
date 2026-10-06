@@ -23,6 +23,11 @@ const ChatFilters = [
   { id: "online", label: "Online" },
 ]
 
+type ChatListProps = {
+  activeChat: string | null;
+  onSelectChat: (userId: string) => void;
+};
+
 type ChatItem = {
   id: string;
   name: string;
@@ -42,12 +47,14 @@ type ConnectedUser = {
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
-export const ChatList = () => {
+export const ChatList = ({
+  activeChat,
+  onSelectChat,
+}: ChatListProps) => {
   const router = useRouter();
   
   const [activeFilter, setActiveFilter] = useState("all");
   const [chats, setChats] = useState<ChatItem[]>([]);
-  const [activeChat, setActiveChat] = useState<string | null>(null);
   const [isOptionsVisible, setIsOptionVisible] = useState(false);
 
   const [query, setQuery] = useState("");
@@ -415,7 +422,7 @@ export const ChatList = () => {
                     <div
                       key={user.id}
                       onClick={() => {
-                        setActiveChat(user.id);
+                        onSelectChat(user.id);
                         setQuery("");
                       }}
                       className="p-2 rounded-md cursor-pointer transition-all duration-200 hover:bg-white/5"
@@ -443,7 +450,7 @@ export const ChatList = () => {
                     return (
                       <div 
                         key={chat.id}
-                        onClick={() => setActiveChat(chat.id)}
+                        onClick={() => onSelectChat(chat.id)}
                         className={`p-2 rounded-md border-l-5 cursor-pointer transition-all duration-200 hover:bg-white/3
                           ${isActiveChat 
                             ? "bg-gradient-to-r from-indigo-400/30 to-transparent border-indigo-500" 
