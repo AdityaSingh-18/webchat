@@ -1,7 +1,14 @@
 "use client";
 
 import { useChatStore } from "@/lib/store/chatStore";
-import { ArrowLeft, Mail, Phone, Calendar, AtSign } from "lucide-react";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Calendar,
+  AtSign,
+  FileText,
+} from "lucide-react";
 
 export const Profile = () => {
   const setActiveTab = useChatStore((state) => state.setActiveTab);
@@ -42,15 +49,22 @@ export const Profile = () => {
             <img 
               src={currentUser?.avatar_url || "./post1.jpg"} 
               alt={currentUser?.full_name || "Profile Photo"} 
-              className="h-32 w-32 rounded-full object-cover ring-4 ring-emerald-500/20 border-3 border-emerald-500 p-1" 
+              className="h-28 w-28 rounded-full object-cover ring-4 ring-emerald-500/20 border-3 border-emerald-500 p-1" 
             />
-              <div className="absolute bottom-2.5 right-2.5 h-5 w-5 bg-emerald-500 rounded-full border-4 border-[#0d1927]\"></div>
+            <div className="absolute bottom-2 right-2 h-5 w-5 bg-emerald-500 rounded-full border-4 border-[#0d1927]\" />
           </div>
-          <h2 className="text-[22px] text-white font-semibold my-2 tracking-wide">{currentUser?.full_name}</h2>
+          <div className="font-semibold tracking-wide">
+            <h2 className="text-white text-[22px] mt-2">
+              {currentUser?.full_name}
+            </h2>
+            <span className="flex items-center justify-center gap-0.5 text-gray-300 text-sm">
+              <AtSign size={14} />{currentUser?.username}
+            </span>
+          </div>
         </div>
 
         <div>
-          <h3 className="text-[11px] font-bold text-gray-500 tracking-widest mb-4 uppercase">Personal Info</h3>
+          <h3 className="text-[11px] font-bold text-gray-500 tracking-widest mt-2 mb-4 uppercase">Personal Info</h3>
           
           <div className="flex flex-col justify-center gap-3">
             <div className="flex gap-4 items-center">
@@ -80,6 +94,17 @@ export const Profile = () => {
                 </p>
               </div>
             </div>
+            {currentUser?.bio && (
+              <div className="flex gap-4 items-center">
+                <FileText size={22} className="shrink-0 text-cyan-500" strokeWidth={2} />
+                <div className="flex flex-col">
+                  <h3 className="text-[13px] text-gray-400">Bio</h3>
+                  <p className="text-sm text-gray-300 leading-5 break-words">
+                    {currentUser.bio}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
