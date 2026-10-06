@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase/supabaseClient";
 import { useChatStore } from "@/lib/store/chatStore";
@@ -10,6 +11,8 @@ export const AuthProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
+  const router = useRouter();
+
   const setCurrentUser = useChatStore((state) => state.setCurrentUser);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,15 +28,24 @@ export const AuthProvider = ({
         setCurrentUser(data);
       } else {
         console.error("Failed to fetch profile:", error);
+        setCurrentUser(null);
       }
 
       setIsLoading(false);
     };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error("Failed to get session:", error);
+        setCurrentUser(null);
+        setIsLoading(false);
+        return;
+      }
+
       if (session?.user) {
         fetchUserProfile(session.user.id);
       } else {
+        setCurrentUser(null);
         setIsLoading(false);
       }
     });
@@ -45,6 +57,7 @@ export const AuthProvider = ({
         } else if (event === "SIGNED_OUT") {
           setCurrentUser(null);
           setIsLoading(false);
+          router.push("/login");
         }
       }
     );
@@ -52,7 +65,7 @@ export const AuthProvider = ({
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [setCurrentUser]);
+  }, [router, setCurrentUser]);
 
   if (isLoading) {
     return (
