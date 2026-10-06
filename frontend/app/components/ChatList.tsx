@@ -14,6 +14,7 @@ import {
   UserPlus, 
   X
 } from "lucide-react";
+import { useChatStore } from "@/lib/store/chatStore";
 
 const ChatFilters = [
   { id: "all", label: "All" },
@@ -36,6 +37,7 @@ type ConnectedUser = {
   name: string;
   username?: string | null;
   img?: string | null;
+  connectionStatus?: "none" | "pending_sent" | "pending_received" | "connected";
 }
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
@@ -58,6 +60,10 @@ export const ChatList = () => {
   const [newResults, setNewResults] = useState<ConnectedUser[]>([]);
   const [newStatus, setNewStatus] = useState<SearchStatus>("idle");
   const [newRetryKey, setNewRetryKey] = useState(0);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
+  const openNewChat = useChatStore((state) => state.openNewChat);
+  const setOpenNewChat = useChatStore((state) => state.setOpenNewChat);
   
   const optionsRef = useRef<HTMLDivElement>(null);
 
@@ -77,6 +83,15 @@ export const ChatList = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (!openNewChat) {
+      return;
+    }
+
+    setNewChat(true);
+    setOpenNewChat(false);
+  }, [openNewChat, setOpenNewChat]);
 
   useEffect(() => {
     const term = query.trim();
@@ -152,6 +167,7 @@ export const ChatList = () => {
             name: u.name ?? u.full_name ?? u.username ?? "Unknown",
             username: u.username ?? null,
             img: u.img ?? u.avatar_url ?? null,
+            connectionStatus: u.connection_status ?? "none",
           }))
         );
         setNewStatus("success");
@@ -185,6 +201,25 @@ export const ChatList = () => {
       router.refresh();
     } catch (error) {
       console.error("Logout failed:", error);
+    }
+  };
+
+  const handleConnect = async (userId: string) => {
+    setSendingId(userId);
+    try {
+      const res = await fetch("/api/connections/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId: userId }),
+      });
+      if (!res.ok) throw new Error();
+      setNewResults((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, connectionStatus: "pending_sent" } : u))
+      );
+    } catch (error) {
+      console.error("Connection request failed:", error);
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -582,12 +617,28 @@ export const ChatList = () => {
                         {user.name.trim().charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-gray-300">{user.name}</p>
                       {user.username && (
                         <p className="truncate text-[13px] text-gray-400">@{user.username}</p>
                       )}
                     </div>
+                    {user.connectionStatus === "connected" ? (
+                      <span className="shrink-0 text-xs text-gray-400">Connected</span>
+                    ) : user.connectionStatus === "pending_sent" ? (
+                      <span className="shrink-0 text-xs text-cyan-400">Pending</span>
+                    ) : user.connectionStatus === "pending_received" ? (
+                      <span className="shrink-0 text-xs text-cyan-400">Requested you</span>
+                    ) : (
+                      <button
+                        onClick={() => handleConnect(user.id)}
+                        disabled={sendingId === user.id}
+                        className="shrink-0 px-3 py-1 rounded-lg text-xs font-medium text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                          bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
+                      >
+                        Connect
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

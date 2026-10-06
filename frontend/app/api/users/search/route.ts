@@ -54,7 +54,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ users: Array.from(merged.values()).slice(0, 20) });
+    const users = Array.from(merged.values()).slice(0, 20);
+    const ids = users.map((u) => u.id);
+    const statusById = new Map<string, string>();
+
+    if (ids.length > 0) {
+      const [sent, received] = await Promise.all([
+        supabase.from("connections").select("contact_id, status").eq("user_id", user.id).in("contact_id", ids),
+        supabase.from("connections").select("user_id, status").eq("contact_id", user.id).in("user_id", ids),
+      ]);
+
+      if (sent.error) throw sent.error;
+      if (received.error) throw received.error;
+
+      for (const r of received.data ?? []) {
+        if (r.status === "accepted") statusById.set(r.user_id, "connected");
+        else if (r.status === "pending") statusById.set(r.user_id, "pending_received");
+      }
+
+      for (const r of sent.data ?? []) {
+        if (r.status === "accepted") statusById.set(r.contact_id, "connected");
+        else if (r.status === "pending") statusById.set(r.contact_id, "pending_sent");
+      }
+    }
+
+    return NextResponse.json({
+      users: users.map((u) => ({ ...u, connection_status: statusById.get(u.id) ?? "none" })),
+    });
   } catch (error) {
     console.error("user search failed:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

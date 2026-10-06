@@ -25,6 +25,9 @@ interface ChatStore {
 
   currentUser: UserProfile | null;
   setCurrentUser: (user: UserProfile | null) => void;
+
+  openNewChat: boolean;
+  setOpenNewChat: (value: boolean) => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -33,4 +36,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   currentUser: null,
   setCurrentUser: (user) => set({ currentUser: user }),
+
+  openNewChat: false,
+  setOpenNewChat: (value) => set({ openNewChat: value }),
 }));
