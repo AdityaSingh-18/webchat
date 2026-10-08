@@ -242,7 +242,7 @@ Create a `.env.local` file in the `frontend/` folder:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-or-publishable-key>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<your-supabase-anon-or-publishable-key>
 VERIFICATION_COOKIE_SECRET=<long-random-string>
 ```
 
