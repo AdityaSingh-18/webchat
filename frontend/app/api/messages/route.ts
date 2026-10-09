@@ -87,7 +87,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at")
+      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", {
         ascending: false,
@@ -99,7 +99,6 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
-
     if (error) {
       console.error("Load messages error:", error);
 

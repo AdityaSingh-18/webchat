@@ -9,6 +9,8 @@ export interface MessageRecord {
   content: string;
   is_read: boolean;
   created_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
 }
 
 interface CreateMessageParams {
@@ -54,7 +56,7 @@ export const createMessage = async ({
     receiver_id: input.receiverId,
     content: input.content,
   })
-  .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at")
+  .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
   .single();
 
   if (error) {

@@ -7,7 +7,10 @@ import {UserDetails, type UserDetailsData} from "@/components/UserDetails";
 import { getInitials } from "@/lib";
 
 import {
+  ArrowDown,
   Calendar,
+  Check,
+  CheckCheck,
   Info,
   Plus,
   ShieldCheck,
@@ -58,19 +61,29 @@ export const ChatWindow = ({
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState("");
 
-  const currentUser = useChatStore((state) => state.currentUser);
-  const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
-  const sendMessage = useChatStore((state) => state.sendMessage);
-  const prependMessages = useChatStore((state) => state.prependMessages);
-
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
+
+  const currentUser = useChatStore((state) => state.currentUser);
+  const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
+  const sendMessage = useChatStore((state) => state.sendMessage);
+  const prependMessages = useChatStore((state) => state.prependMessages);
+  const markMessagesRead = useChatStore((state) => state.markMessagesRead);
+
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
   const initialLoadRef = useRef(true);
+
+  const lastMessageIdRef = useRef<string | null>(null);
+  const activeChatUserIdRef = useRef<string | null>(null);
+  const isNearBottomRef = useRef(true);
+
+  const BOTTOM_THRESHOLD = 120;
 
   const handleSendMessage = async () => {
     const content = messageInput.trim();
@@ -137,12 +150,20 @@ export const ChatWindow = ({
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
 
-    if (
-      !container ||
-      !nextCursor ||
-      !hasMoreMessages ||
-      loadingOlder
-    ) {
+    if (!container) {
+      return;
+    }
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceFromBottom <= BOTTOM_THRESHOLD;
+    isNearBottomRef.current = isNearBottom;
+    
+    if (isNearBottom) {
+      setShowScrollToBottom(false);
+      setNewMessageCount(0);
+    }
+
+    if (!nextCursor || !hasMoreMessages || loadingOlder) {
       return;
     }
 
@@ -156,27 +177,69 @@ export const ChatWindow = ({
 
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container) {
+
+    if (!container || !userId) {
       return;
     }
 
+    const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+    if (activeChatUserIdRef.current !== userId) {
+      activeChatUserIdRef.current = userId;
+      initialLoadRef.current = true;
+      previousScrollHeightRef.current = null;
+      lastMessageIdRef.current = null;
+      isNearBottomRef.current = true;
+
+      setShowScrollToBottom(false);
+      setNewMessageCount(0);
+    }
+
     if (initialLoadRef.current) {
-      if (messages.length > 0) {
-        container.scrollTop = container.scrollHeight;
+      if (historyLoading) {
+        return;
       }
 
+      container.scrollTop = container.scrollHeight;
+
       initialLoadRef.current = false;
+      previousScrollHeightRef.current = null;
+      lastMessageIdRef.current = latestMessage?.id ?? null;
+      isNearBottomRef.current = true;
+
+      setShowScrollToBottom(false);
+      setNewMessageCount(0);
+
       return;
     }
 
     const previousScrollHeight = previousScrollHeightRef.current;
-    if (previousScrollHeight === null) {
+    if (previousScrollHeight !== null) {
+      container.scrollTop = container.scrollHeight - previousScrollHeight;
+      previousScrollHeightRef.current = null;
+      lastMessageIdRef.current = latestMessage?.id ?? null;
+
       return;
     }
 
-    container.scrollTop = container.scrollHeight - previousScrollHeight;
-    previousScrollHeightRef.current = null;
-  }, [messages]);
+    const hasNewLatestMessage = latestMessage !== null && latestMessage.id !== lastMessageIdRef.current;
+    if (hasNewLatestMessage && latestMessage) {
+      const isMyMessage = latestMessage.sender_id === currentUser?.id;
+
+      if (isMyMessage || isNearBottomRef.current) {
+        container.scrollTo({top: container.scrollHeight, behavior: "smooth"});
+        isNearBottomRef.current = true;
+
+        setShowScrollToBottom(false);
+        setNewMessageCount(0);
+      } else {
+        setNewMessageCount((count) => count + 1);
+        setShowScrollToBottom(true);
+      }
+    }
+
+    lastMessageIdRef.current = latestMessage?.id ?? null;
+  }, [messages, userId, historyLoading, currentUser?.id]);
 
   useEffect(() => {
     setShowDetails(false);
@@ -245,6 +308,14 @@ export const ChatWindow = ({
 
     void loadMessages();
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId || historyLoading || messages.length === 0) {
+      return;
+    }
+
+    void markMessagesRead(userId);
+  }, [userId, historyLoading, messages, markMessagesRead]);
 
   return (
     <>
@@ -325,79 +396,147 @@ export const ChatWindow = ({
                 </button>
               )}
             </div>
-            <div
-              ref={messagesContainerRef}
-              onScroll={handleMessagesScroll} 
-              className="flex-1 w-full min-h-0 overflow-y-auto bg-[#080f1c] 
-                bg-[radial-gradient(circle_at_bottom_left,_rgba(6,100,130,0.35),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(70,25,120,0.3),_transparent_40%)]
-                [&::-webkit-scrollbar]:w-[8px]
-                [&::-webkit-scrollbar-track]:bg-transparent
-                [&::-webkit-scrollbar-thumb]:border-[2px]
-                [&::-webkit-scrollbar-thumb]:rounded-full
-                [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
-            >
-              
-              {loadingOlder && (
-                <div className="flex justify-center py-3">
-                  <span className="text-xs text-gray-400">
-                    Loading older messages...
-                  </span>
-                </div>
-              )}
-              {historyLoading ? (
-                <div className="flex justify-center py-6">
-                  <span className="text-sm text-gray-400">
-                    Loading messages...
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 px-12 py-4">
-                  {messages.map((data, index) => {
-                    const me = data.sender_id === currentUser?.id;
-                    const currentDateKey = getDateKey(new Date(data.created_at));
+            <div className="relative flex-1 w-full min-h-0">
+              <div
+                ref={messagesContainerRef}
+                onScroll={handleMessagesScroll} 
+                className="h-full w-full overflow-y-auto bg-[#080f1c] 
+                  bg-[radial-gradient(circle_at_bottom_left,_rgba(6,100,130,0.35),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(70,25,120,0.3),_transparent_40%)]
+                  [&::-webkit-scrollbar]:w-[10px]
+                  [&::-webkit-scrollbar-track]:bg-transparent
+                  [&::-webkit-scrollbar-thumb]:border-[2px]
+                  [&::-webkit-scrollbar-thumb]:rounded-full
+                  [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
+              >
+                
+                {loadingOlder && (
+                  <div className="flex justify-center py-3">
+                    <span className="text-xs text-gray-400">
+                      Loading older messages...
+                    </span>
+                  </div>
+                )}
+                {historyLoading ? (
+                  <div className="flex justify-center py-6">
+                    <span className="text-sm text-gray-400">
+                      Loading messages...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 px-12 py-4">
+                    {messages.map((data, index) => {
+                      const me = data.sender_id === currentUser?.id;
+                      const currentDateKey = getDateKey(new Date(data.created_at));
 
-                    const previousDateKey = index > 0
-                      ? getDateKey(new Date(messages[index - 1].created_at))
-                      : null;
-                    const showDateSeparator = currentDateKey !== previousDateKey;
+                      const previousDateKey = index > 0
+                        ? getDateKey(new Date(messages[index - 1].created_at))
+                        : null;
+                      const showDateSeparator = currentDateKey !== previousDateKey;
 
-                    return (
-                      <div key={data.id}>
-                        {showDateSeparator && (() => {
-                          const dateLabel = formatDateSeparator(data.created_at);
-                          const showCalendar = dateLabel !== "Today" && dateLabel !== "Yesterday";
+                      return (
+                        <div key={data.id}>
+                          {showDateSeparator && (() => {
+                            const dateLabel = formatDateSeparator(data.created_at);
+                            const showCalendar = dateLabel !== "Today" && dateLabel !== "Yesterday";
 
-                          return (
-                            <div className="flex items-center justify-center py-2">
-                              <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
-                                {showCalendar && <Calendar size={16} />}
-                                {dateLabel}
+                            return (
+                              <div className="flex items-center justify-center py-2">
+                                <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
+                                  {showCalendar && <Calendar size={16} />}
+                                  {dateLabel}
+                                </div>
                               </div>
+                            );
+                          })()}
+                          <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
+                            <div
+                              className={`w-fit min-w-50 px-4 py-3 text-white ${
+                                me
+                                  ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
+                                  : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
+                              }`}
+                            >
+                              {data.content}
                             </div>
-                          );
-                        })()}
-                        <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
-                          <div
-                            className={`w-fit min-w-50 px-4 py-3 text-white ${
-                              me
-                                ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
-                                : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
-                            }`}
+                          </div>
+
+                          <div className={`mt-1.5 text-gray-300 text-[10px] flex items-center gap-1.5 
+                            ${me ? "justify-end" : "justify-start"}`}
                           >
-                            {data.content}
+                            <span>
+                              {new Date(data.created_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+
+                            {me && (
+                              <span title={data.read_at || data.is_read
+                                ? "Read"
+                                : data.delivered_at
+                                  ? "Delivered"
+                                  : "Sent"
+                                }
+                                aria-label={data.read_at || data.is_read
+                                  ? "Message read"
+                                  : data.delivered_at
+                                    ? "Message delivered"
+                                    : "Message sent"
+                                }
+                                className={data.read_at || data.is_read
+                                  ? "text-cyan-300"
+                                  : data.delivered_at
+                                    ? "text-gray-300"
+                                    : "text-gray-500"
+                                }
+                              >
+                                {data.read_at || data.is_read ? (
+                                  <CheckCheck size={14} />
+                                ) : data.delivered_at ? (
+                                  <CheckCheck size={14} />
+                                ) : (
+                                  <Check size={14} />
+                                )}
+                              </span>
+                            )}
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {showScrollToBottom && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const container = messagesContainerRef.current;
 
-                        <div className={`mt-1.5 text-gray-300 text-[10px] flex ${me ? "justify-end" : "justify-start"}`}>
-                          {new Date(data.created_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                    if (!container) {
+                      return;
+                    }
+
+                    container.scrollTo({
+                      top: container.scrollHeight,
+                      behavior: "smooth",
+                    });
+
+                    isNearBottomRef.current = true;
+
+                    setShowScrollToBottom(false);
+                    setNewMessageCount(0);
+                  }}
+                  aria-label={`${newMessageCount} new messages.`}
+                  className="absolute bottom-5 right-6 z-20 flex items-center gap-2 rounded-full border border-gray-700 bg-[#0d1927]/95
+                    px-4 py-2 text-sm text-white shadow-lg transition-colors hover:bg-gray-800"
+                >
+                  <span>
+                    {newMessageCount} new{" "}
+                    {newMessageCount === 1 ? "message" : "messages"}
+                  </span>
+
+                  <ArrowDown size={18} />
+                </button>
               )}
             </div>
             <div className="shrink-0 flex gap-3 p-4 bg-[#0a1220] border-t-2 border-gray-800">

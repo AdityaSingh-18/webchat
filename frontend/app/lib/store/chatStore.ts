@@ -5,6 +5,31 @@ import { createSocket } from "@/lib/socket/socket";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/supabaseClient";
 
+const deliveryRequestsInFlight = new Set<string>();
+const readRequestsInFlight = new Set<string>();
+
+const requestDeliveredReceipt = async (messageId: string) => {
+  if (deliveryRequestsInFlight.has(messageId)) {
+    return;
+  }
+
+  deliveryRequestsInFlight.add(messageId);
+
+  try {
+    const { error } = await supabase.rpc("mark_message_delivered", {
+      p_message_id: messageId,
+    });
+
+    if (error) {
+      console.error("Mark message delivered error:", error);
+    }
+  } catch (error) {
+    console.error("Mark message delivered error:", error);
+  } finally {
+    deliveryRequestsInFlight.delete(messageId);
+  }
+};
+
 export type Tabs =
   | "chat"
   | "group"
@@ -32,6 +57,8 @@ export interface MessageRecord {
   content: string;
   is_read: boolean;
   created_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
 }
 
 interface ChatStore {
@@ -62,6 +89,9 @@ interface ChatStore {
     userId: string,
     messages: MessageRecord[],
   ) => void;
+
+  updateMessage: (message: MessageRecord) => void;
+  markMessagesRead: (userId: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -89,20 +119,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ? message.receiver_id
       : message.sender_id;
 
+    if (message.receiver_id === currentUserId && !message.delivered_at) {
+      void requestDeliveredReceipt(message.id);
+    }
+
     set((state) => {
       const existingMessages = state.messages[conversationUserId] ?? [];
 
-      if (existingMessages.some((existingMessage) => existingMessage.id === message.id)) {
+      if (existingMessages.some((existingMessage) => existingMessage.id === message.id,)) {
         return state;
       }
 
       return {
         messages: {
           ...state.messages,
-          [conversationUserId]: [
-            ...existingMessages,
-            message,
-          ],
+          [conversationUserId]: [...existingMessages, message],
         },
       };
     });
@@ -136,6 +167,93 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         },
       };
     });
+  },
+
+  updateMessage: (message) => {
+    set((state) => {
+      const currentUserId = state.currentUser?.id;
+
+      if (!currentUserId) {
+        return state;
+      }
+
+      const conversationUserId = message.sender_id === currentUserId
+        ? message.receiver_id
+        : message.sender_id;
+
+      const existingMessages = state.messages[conversationUserId];
+
+      if (!existingMessages) {
+        return state;
+      }
+
+      const messageExists = existingMessages.some((existingMessage) => existingMessage.id === message.id);
+
+      if (!messageExists) {
+        return state;
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          [conversationUserId]: existingMessages.map(
+            (existingMessage) =>
+              existingMessage.id === message.id
+                ? { ...existingMessage, ...message }
+                : existingMessage,
+          ),
+        },
+      };
+    });
+  },
+
+  markMessagesRead: async (userId) => {
+    const currentUserId = get().currentUser?.id;
+
+    if (!currentUserId) {
+      return;
+    }
+
+    const unreadMessages = (get().messages[userId] ?? []).filter((message) =>
+      message.receiver_id === currentUserId && (!message.is_read || !message.read_at),
+    );
+
+    await Promise.all(unreadMessages.map(async (message) => {
+        if (readRequestsInFlight.has(message.id)) {
+          return;
+        }
+
+        readRequestsInFlight.add(message.id);
+        try {
+          const { data, error } = await supabase.rpc("mark_message_read",
+            {
+              p_message_id: message.id,
+            },
+          );
+
+          if (error) {
+            console.error("Mark message read error:", error);
+            return;
+          }
+
+          if (data) {
+            const latestMessage = (get().messages[userId] ?? []).find((item) => item.id === message.id) ?? message;
+            const receiptTime = new Date().toISOString();
+
+            get().updateMessage({
+              ...latestMessage,
+              is_read: true,
+              delivered_at: latestMessage.delivered_at ?? receiptTime,
+              read_at: latestMessage.read_at ?? receiptTime,
+            });
+          }
+        } catch (error) {
+          console.error("Mark message read error:", error);
+        } finally {
+          readRequestsInFlight.delete(message.id);
+        }
+      }),
+    );
   },
 
   connectSocket: (accessToken) => {
@@ -267,8 +385,41 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         get().addMessage(message);
       },
     )
-    .subscribe((status) => {
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+      },
+      (payload) => {
+        const message = payload.new as MessageRecord;
+
+        if (
+          message.sender_id !== userId &&
+          message.receiver_id !== userId
+        ) {
+          return;
+        }
+
+        console.log("Message receipt UPDATE received:", {
+          id: message.id,
+          sender_id: message.sender_id,
+          receiver_id: message.receiver_id,
+          delivered_at: message.delivered_at,
+          read_at: message.read_at,
+          is_read: message.is_read,
+        });
+
+        get().updateMessage(message);
+      },
+    )
+    .subscribe((status, error) => {
       console.log("Supabase Realtime status:", status);
+
+      if (error) {
+        console.error("Supabase Realtime subscription error:", error);
+      }
     });
 
     set({ realtimeChannel: channel });
