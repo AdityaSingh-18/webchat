@@ -3,16 +3,15 @@
 import { useEffect, useState, useRef} from "react";
 import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
 
+import {UserDetails, type UserDetailsData} from "@/components/UserDetails";
+import { getInitials } from "@/lib";
+
 import {
+  Calendar,
   Info,
   Plus,
   ShieldCheck,
 } from "lucide-react";
-
-import {
-  UserDetails,
-  type UserDetailsData,
-} from "@/components/UserDetails";
 import toast from "react-hot-toast";
 
 type ChatWindowProps = {
@@ -20,6 +19,34 @@ type ChatWindowProps = {
 };
 
 const EMPTY_MESSAGES: MessageRecord[] = [];
+
+const getDateKey = (date: Date) => {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+const formatDateSeparator = (value: string) => {
+  const date = new Date(value);
+
+  const today = new Date();
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (getDateKey(date) === getDateKey(today)) {
+    return "Today";
+  }
+
+  if (getDateKey(date) === getDateKey(yesterday)) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "2-digit",
+    year: "numeric",
+  });
+};
 
 export const ChatWindow = ({
   userId,
@@ -268,10 +295,10 @@ export const ChatWindow = ({
                     className="shrink-0 h-12 w-12 object-cover rounded-full"
                   />
                 ) : (
-                  <div className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center  text-white font-semibold
+                  <div className="shrink-0 h-12 w-12 text-lg rounded-full flex items-center justify-center text-white font-semibold
                     bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
                   >
-                    {user?.name?.trim().charAt(0).toUpperCase() || "?"}
+                    {getInitials(user?.name ?? "?")}
                   </div>
                 )}
 
@@ -303,7 +330,7 @@ export const ChatWindow = ({
               onScroll={handleMessagesScroll} 
               className="flex-1 w-full min-h-0 overflow-y-auto bg-[#080f1c] 
                 bg-[radial-gradient(circle_at_bottom_left,_rgba(6,100,130,0.35),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(70,25,120,0.3),_transparent_40%)]
-                [&::-webkit-scrollbar]:w-[10px]
+                [&::-webkit-scrollbar]:w-[8px]
                 [&::-webkit-scrollbar-track]:bg-transparent
                 [&::-webkit-scrollbar-thumb]:border-[2px]
                 [&::-webkit-scrollbar-thumb]:rounded-full
@@ -325,16 +352,31 @@ export const ChatWindow = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 px-12 py-4">
-                  {messages.map((data) => {
+                  {messages.map((data, index) => {
                     const me = data.sender_id === currentUser?.id;
+                    const currentDateKey = getDateKey(new Date(data.created_at));
+
+                    const previousDateKey = index > 0
+                      ? getDateKey(new Date(messages[index - 1].created_at))
+                      : null;
+                    const showDateSeparator = currentDateKey !== previousDateKey;
 
                     return (
                       <div key={data.id}>
-                        <div
-                          className={`flex ${
-                            me ? "justify-end" : "justify-start"
-                          }`}
-                        >
+                        {showDateSeparator && (() => {
+                          const dateLabel = formatDateSeparator(data.created_at);
+                          const showCalendar = dateLabel !== "Today" && dateLabel !== "Yesterday";
+
+                          return (
+                            <div className="flex items-center justify-center py-2">
+                              <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
+                                {showCalendar && <Calendar size={16} />}
+                                {dateLabel}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
                           <div
                             className={`w-fit min-w-50 px-4 py-3 text-white ${
                               me
@@ -346,11 +388,7 @@ export const ChatWindow = ({
                           </div>
                         </div>
 
-                        <div
-                          className={`mt-1.5 text-gray-300 text-[10px] flex ${
-                            me ? "justify-end" : "justify-start"
-                          }`}
-                        >
+                        <div className={`mt-1.5 text-gray-300 text-[10px] flex ${me ? "justify-end" : "justify-start"}`}>
                           {new Date(data.created_at).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",

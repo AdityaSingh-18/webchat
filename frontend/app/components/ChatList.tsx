@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+
+import { supabase } from "@/lib/supabase/supabaseClient";
+import { useChatStore } from "@/lib/store/chatStore";
+import { getInitials } from "@/lib";
 
 import {
   ArrowLeft, 
@@ -14,7 +18,6 @@ import {
   UserPlus, 
   X
 } from "lucide-react";
-import { useChatStore } from "@/lib/store/chatStore";
 
 const ChatFilters = [
   { id: "all", label: "All" },
@@ -47,6 +50,37 @@ type ConnectedUser = {
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
+const formatChatTime = (value?: string | null) => {
+  if (!value){
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())){
+    return "";
+  }
+
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  });
+};
+
 export const ChatList = ({
   activeChat,
   onSelectChat,
@@ -71,8 +105,120 @@ export const ChatList = ({
 
   const openNewChat = useChatStore((state) => state.openNewChat);
   const setOpenNewChat = useChatStore((state) => state.setOpenNewChat);
+
+  const currentUserId = useChatStore((state) => state.currentUser?.id ?? null);
+  const [chatListStatus, setChatListStatus] = useState<"loading" | "success" | "error">("loading");
   
   const optionsRef = useRef<HTMLDivElement>(null);
+
+  const loadChats = useCallback(async () => {
+    if (!currentUserId){
+      return;
+    }
+
+    setChatListStatus("loading");
+    try {
+      const response = await fetch("/api/chats", {
+        cache: "no-store",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to load chats");
+      }
+
+      const rows = Array.isArray(data.chats) ? data.chats : [];
+      setChats(
+        rows.map((row: {
+          user_id: string;
+          full_name: string | null;
+          username: string | null;
+          avatar_url: string | null;
+          conversation_id: string | null;
+          last_message: string | null;
+          last_message_at: string | null;
+          last_message_sender_id: string | null;
+          unread_count: number | string | null;
+        }) => {
+          const lastMessage = row.last_message ?? "";
+          const isOwnMessage = row.last_message_sender_id === currentUserId;
+
+          return {
+            id: row.user_id,
+            name: row.full_name ?? row.username ?? "Unknown",
+            img: row.avatar_url,
+            lastChat: formatChatTime(row.last_message_at),
+            chat: lastMessage
+              ? `${isOwnMessage ? "You: " : ""}${lastMessage}`
+              : "No messages yet",
+            messageCount: Number(row.unread_count ?? 0),
+          };
+        }),
+      );
+
+      setChatListStatus("success");
+    } catch (error) {
+      console.error("Failed to load chats:", error);
+      setChatListStatus("error");
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    void loadChats();
+
+    const handleFocus = () => {
+      void loadChats();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [loadChats]);
+
+  useEffect(() => {
+    if (!currentUserId){
+      return;
+    }
+
+    const refreshChats = () => {
+      void loadChats();
+    };
+
+    const channel = supabase.channel(`chat-list:${currentUserId}`).on("postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `receiver_id=eq.${currentUserId}`,
+      },
+      refreshChats,
+    )
+    .on("postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `sender_id=eq.${currentUserId}`,
+      },
+      refreshChats,
+    )
+    .on("postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        filter: `receiver_id=eq.${currentUserId}`,
+      },
+      refreshChats,
+    )
+    .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadChats]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -398,7 +544,47 @@ export const ChatList = ({
               </button>
             </div>
           )}
-          {!isSearching && chats.length === 0 && (
+          {!isSearching && chatListStatus === "loading" && chats.length === 0 && (
+            <div className="px-2 flex flex-col" aria-busy="true">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-2 animate-pulse"
+                >
+                  <div className="h-12 w-12 rounded-full bg-gray-700/60" />
+
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-1/2 rounded bg-gray-700/60" />
+                    <div className="h-3 w-3/4 rounded bg-gray-700/40" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        {!isSearching && chatListStatus === "error" && chats.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 px-8 pb-16">
+              <TriangleAlert size={26} className="text-gray-300" />
+
+              <div>
+                <p className="text-white font-semibold">
+                  Couldn't load chats
+                </p>
+
+                <p className="text-[13px] text-gray-400 mt-1">
+                  Check your connection and try again.
+                </p>
+              </div>
+
+              <button
+                onClick={() => void loadChats()}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-white/10 hover:bg-white/15 cursor-pointer transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {!isSearching && chatListStatus === "success" && chats.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 px-8 pb-16">
               <div className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center text-gray-300">
                 <UserPlus size={26} />
@@ -473,9 +659,9 @@ export const ChatList = ({
                           {chat.img ? (
                             <img src={chat.img} alt={chat.name} className="shrink-0 h-12 w-12 object-cover rounded-full"/>
                           ) : (
-                            <div className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold
+                            <div className="shrink-0 h-12 w-12 text-lg rounded-full flex items-center justify-center text-white font-semibold
                               bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]">
-                              {chat.name.trim().charAt(0).toUpperCase()}
+                              {getInitials(chat?.name ?? "?")}
                             </div>
                           )}
                           <div className="w-full flex flex-col justify-center">

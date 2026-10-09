@@ -102,10 +102,10 @@ This README doubles as the project's progress tracker, and items are ticked as t
 
 - [x] Database schema for conversations and messages, with Row Level Security
 - [x] Send and receive text messages between connected users
-- [ ] Real-time delivery with Supabase Realtime
-- [ ] Message history with pagination (load older messages on scroll)
-- [ ] Real chat list: accepted connections with last message, time and unread count _(today the list stays empty until you search)_
-- [ ] Day separators from real message dates _(replaces the hard-coded date chip)_
+- [x] Real-time delivery with Supabase Realtime
+- [x] Message history with pagination (load older messages on scroll)
+- [x] Real chat list: accepted connections with last message, time and unread count _(today the list stays empty until you search)_
+- [x] Day separators from real message dates _(replaces the hard-coded date chip)_
 - [ ] Sent / delivered / read receipts
 - [ ] Typing indicators
 - [ ] Online / offline presence _(currently always shown as "Offline")_

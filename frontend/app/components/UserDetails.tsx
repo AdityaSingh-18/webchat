@@ -1,5 +1,6 @@
 "use client";
 
+import { getInitials } from "@/lib";
 import {
   Ban,
   Calendar,
@@ -48,16 +49,6 @@ const formatConnectedDate = (value: string | null) => {
     month: "long",
     year: "numeric",
   });
-};
-
-const getInitials = (name: string) => {
-  return name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0))
-    .join("")
-    .toUpperCase();
 };
 
 export const UserDetails = ({
