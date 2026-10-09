@@ -14,6 +14,9 @@ export const AuthProvider = ({
   const router = useRouter();
 
   const setCurrentUser = useChatStore((state) => state.setCurrentUser);
+  const connectSocket = useChatStore((state) => state.connectSocket);
+  const disconnectSocket = useChatStore((state) => state.disconnectSocket);
+
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -43,8 +46,10 @@ export const AuthProvider = ({
       }
 
       if (session?.user) {
+        connectSocket(session.access_token);
         fetchUserProfile(session.user.id);
       } else {
+        disconnectSocket();
         setCurrentUser(null);
         setIsLoading(false);
       }
@@ -53,8 +58,12 @@ export const AuthProvider = ({
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session?.user) {
+          connectSocket(session.access_token);
           fetchUserProfile(session.user.id);
+        } else if (event === "TOKEN_REFRESHED" && session?.access_token) {
+          connectSocket(session.access_token);
         } else if (event === "SIGNED_OUT") {
+          disconnectSocket();
           setCurrentUser(null);
           setIsLoading(false);
           router.push("/login");
@@ -65,7 +74,7 @@ export const AuthProvider = ({
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [router, setCurrentUser]);
+  }, [router, setCurrentUser, connectSocket, disconnectSocket,]);
 
   if (isLoading) {
     return (

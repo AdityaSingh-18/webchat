@@ -100,8 +100,8 @@ This README doubles as the project's progress tracker, and items are ticked as t
 
 ### Phase 5 — Real-time 1:1 messaging 🎯 (next)
 
-- [ ] Database schema for conversations and messages, with Row Level Security
-- [ ] Send and receive text messages between connected users
+- [x] Database schema for conversations and messages, with Row Level Security
+- [x] Send and receive text messages between connected users
 - [ ] Real-time delivery with Supabase Realtime
 - [ ] Message history with pagination (load older messages on scroll)
 - [ ] Real chat list: accepted connections with last message, time and unread count _(today the list stays empty until you search)_

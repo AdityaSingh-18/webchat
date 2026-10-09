@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
 
 import {
   Calendar,
@@ -13,22 +14,17 @@ import {
   UserDetails,
   type UserDetailsData,
 } from "@/components/UserDetails";
-
-interface Message {
-  id: string;
-  sender: string;
-  message: string;
-  time: string;
-}
+import toast from "react-hot-toast";
 
 type ChatWindowProps = {
   userId: string | null;
 };
 
+const EMPTY_MESSAGES: MessageRecord[] = [];
+
 export const ChatWindow = ({
   userId,
 }: ChatWindowProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
 
@@ -36,10 +32,23 @@ export const ChatWindow = ({
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState("");
 
-  const handleSendMessage = () => {
-    if (!messageInput.trim())  return;
+  const currentUser = useChatStore((state) => state.currentUser);
+  const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
+  const sendMessage = useChatStore((state) => state.sendMessage);
 
-    setMessageInput("");
+  const handleSendMessage = async () => {
+    const content = messageInput.trim();
+
+    if (!content || !userId) {
+      return;
+    }
+
+    try {
+      await sendMessage(userId, content);
+      setMessageInput("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send message.");
+    }
   };
 
   useEffect(() => {
@@ -58,8 +67,7 @@ export const ChatWindow = ({
       setUserError("");
 
       try {
-        const response = await fetch(
-          `/api/users/${userId}`,
+        const response = await fetch(`/api/users/${userId}`,
           {
             cache: "no-store",
             signal: controller.signal,
@@ -67,11 +75,8 @@ export const ChatWindow = ({
         );
 
         const data = await response.json();
-
         if (!response.ok) {
-          throw new Error(
-            data.error || "Failed to load user.",
-          );
+          throw new Error(data.error || "Failed to load user.");
         }
 
         setUser({
@@ -82,26 +87,18 @@ export const ChatWindow = ({
           commonGroupsCount: null,
         });
       } catch (error) {
-        if (
-          error instanceof Error &&
-          error.name === "AbortError"
-        ) {
+        if (error instanceof Error && error.name === "AbortError") {
           return;
         }
 
         setUser(null);
-        setUserError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load user.",
-        );
+        setUserError(error instanceof Error ? error.message : "Failed to load user.");
       } finally {
         setUserLoading(false);
       }
     };
 
     loadUser();
-
     return () => {
       controller.abort();
     };
@@ -157,10 +154,7 @@ export const ChatWindow = ({
                   />
                 ) : (
                   <div
-                    className="
-                      shrink-0 h-12 w-12 rounded-full
-                      flex items-center justify-center
-                      text-white font-semibold
+                    className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center  text-white font-semibold
                       bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]
                     "
                   >
@@ -170,28 +164,14 @@ export const ChatWindow = ({
 
                 <div className="flex flex-col justify-center min-w-0">
                   <p className="font-semibold text-[18px] text-white truncate">
-                    {userLoading
-                      ? "Loading..."
-                      : user?.name || "Select a chat"}
+                    {userLoading ? "Loading..." : user?.name || "Select a chat"}
                   </p>
 
                   {user && (
                     <div className="flex gap-2 items-center">
-                      <div
-                        className={`h-2 w-2 rounded-full ${
-                          user.online
-                            ? "bg-green-400"
-                            : "bg-gray-500"
-                        }`}
-                      />
+                      <div className={`h-2 w-2 rounded-full ${user.online ? "bg-green-400" : "bg-gray-500"}`} />
 
-                      <p
-                        className={`text-sm truncate ${
-                          user.online
-                            ? "text-green-400"
-                            : "text-gray-400"
-                        }`}
-                      >
+                      <p className={`text-sm truncate ${user.online ? "text-green-400" : "text-gray-400"}`}>
                         {user.online ? "Online" : "Offline"}
                       </p>
                     </div>
@@ -200,10 +180,7 @@ export const ChatWindow = ({
               </div>
 
               {user && (
-                <button
-                  onClick={() => setShowDetails((value) => !value)}
-                  aria-label="Show user details"
-                >
+                <button onClick={() => setShowDetails((value) => !value)} aria-label="Show user details">
                   <Info className="text-cyan-600 stroke-[3] cursor-pointer hover:text-cyan-500" />
                 </button>
               )}
@@ -224,20 +201,25 @@ export const ChatWindow = ({
               </div>
               <div className="flex flex-col gap-2 px-12 py-4">
                 {messages.map((data) => {
+                  const me = data.sender_id === currentUser?.id;
+
                   return (
                     <div key={data.id}>
-                      <div className={`flex ${data.sender === "You" ? "justify-end" : "justify-start"}`}>
+                      <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
                         <div className={`w-fit min-w-50 px-4 py-3 text-white
-                          ${data.sender === "You"
+                          ${me
                             ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
                             : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
                           }`}
                         >
-                          {data.message}
+                          {data.content}
                         </div>
                       </div>
-                      <div className={`mt-1.5 text-gray-300 text-[10px] flex ${data.sender === "You" ? "justify-end" : "justify-start"}`}>
-                        {data.time}
+                      <div className={`mt-1.5 text-gray-300 text-[10px] flex ${me ? "justify-end" : "justify-start"}`}>
+                        {new Date(data.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
                   );

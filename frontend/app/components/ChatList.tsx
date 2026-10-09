@@ -76,16 +76,12 @@ export const ChatList = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        optionsRef.current &&
-        !optionsRef.current.contains(event.target as Node)
-      ) {
+      if (optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
         setIsOptionVisible(false);
       }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
@@ -114,11 +110,14 @@ export const ChatList = ({
  
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/users/connected-search?q=${encodeURIComponent(term)}`,
-          { signal: controller.signal }
+        const res = await fetch(`/api/users/connected-search?q=${encodeURIComponent(term)}`,
+          { 
+            signal: controller.signal 
+          }
         );
-        if (!res.ok) throw new Error();
+        if (!res.ok){
+          throw new Error();
+        }
  
         const data = await res.json();
         const list = Array.isArray(data) ? data : data.users ?? [];
@@ -133,7 +132,9 @@ export const ChatList = ({
         );
         setStatus("success");
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
+        if ((err as Error).name === "AbortError"){
+          return;
+        }
         setResults([]);
         setStatus("error");
       }
@@ -159,11 +160,15 @@ export const ChatList = ({
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(term)}`,
-          { signal: controller.signal }
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(term)}`,
+          { 
+            signal: controller.signal 
+          }
         );
-        if (!res.ok) throw new Error();
+        
+        if (!res.ok){
+          throw new Error();
+        }
 
         const data = await res.json();
         const list = Array.isArray(data) ? data : data.users ?? [];
@@ -179,7 +184,9 @@ export const ChatList = ({
         );
         setNewStatus("success");
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
+        if ((err as Error).name === "AbortError"){
+          return;
+        }
         setNewResults([]);
         setNewStatus("error");
       }
@@ -219,7 +226,11 @@ export const ChatList = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contactId: userId }),
       });
-      if (!res.ok) throw new Error();
+      
+      if (!res.ok){
+        throw new Error();
+      }
+      
       setNewResults((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, connectionStatus: "pending_sent" } : u))
       );
@@ -429,12 +440,12 @@ export const ChatList = ({
                     >
                       <div className="flex items-center gap-3">
                         {user.img ? (
-                          <img src={user.img} alt={user.name} className="shrink-0 h-12 w-12 object-cover rounded-full" />
-                        ) : (
-                          <div className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold
-                            bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]">
-                            {user.name.trim().charAt(0).toUpperCase()}
-                          </div>
+                            <img src={user.img} alt={user.name} className="shrink-0 h-12 w-12 object-cover rounded-full" />
+                          ) : (
+                            <div className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold
+                              bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]">
+                              {user.name.trim().charAt(0).toUpperCase()}
+                            </div>
                         )}
                         <div className="min-w-0">
                           <p className="truncate font-medium text-gray-300">{user.name}</p>
@@ -626,25 +637,23 @@ export const ChatList = ({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-gray-300">{user.name}</p>
-                      {user.username && (
-                        <p className="truncate text-[13px] text-gray-400">@{user.username}</p>
-                      )}
+                      {user.username && <p className="truncate text-[13px] text-gray-400">@{user.username}</p>}
                     </div>
                     {user.connectionStatus === "connected" ? (
-                      <span className="shrink-0 text-xs text-gray-400">Connected</span>
-                    ) : user.connectionStatus === "pending_sent" ? (
-                      <span className="shrink-0 text-xs text-cyan-400">Pending</span>
-                    ) : user.connectionStatus === "pending_received" ? (
-                      <span className="shrink-0 text-xs text-cyan-400">Requested you</span>
-                    ) : (
-                      <button
-                        onClick={() => handleConnect(user.id)}
-                        disabled={sendingId === user.id}
-                        className="shrink-0 px-3 py-1 rounded-lg text-xs font-medium text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
-                          bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
-                      >
-                        Connect
-                      </button>
+                        <span className="shrink-0 text-sm text-gray-400">Connected</span>
+                      ) : user.connectionStatus === "pending_sent" ? (
+                        <span className="shrink-0 text-sm text-cyan-400">Pending</span>
+                      ) : user.connectionStatus === "pending_received" ? (
+                        <span className="shrink-0 text-sm text-cyan-400">Requested you</span>
+                      ) : (
+                        <button
+                          onClick={() => handleConnect(user.id)}
+                          disabled={sendingId === user.id}
+                          className="shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                            bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
+                        >
+                          Connect
+                        </button>
                     )}
                   </div>
                 </div>

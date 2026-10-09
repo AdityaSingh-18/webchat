@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { Server } from "socket.io";
+import { getUserRoom } from "./lib/socket/rooms";
+import { registerMessagingHandlers } from "./sockets/messaging";
 
 import { env } from "./config/env";
 import { supabase } from "./lib/supabase";
@@ -57,6 +59,7 @@ const start = async () => {
 
         socket.data.userId = user.id;
         socket.data.user = user;
+        socket.data.accessToken = accessToken;
 
         next();
       } catch {
@@ -65,14 +68,14 @@ const start = async () => {
     });
 
     io.on("connection", (socket) => {
-      app.log.info(
-        `Authenticated socket connected: ${socket.data.userId} (${socket.id})`
-      );
+      const userRoom = getUserRoom(socket.data.userId);
+
+      socket.join(userRoom);
+      registerMessagingHandlers(io, socket);
+      app.log.info(`Authenticated socket connected: ${socket.data.userId} (${socket.id})`);
 
       socket.on("disconnect", (reason) => {
-        app.log.info(
-          `Socket disconnected: ${socket.data.userId} (${socket.id}) - ${reason}`
-        );
+        app.log.info(`Socket disconnected: ${socket.data.userId} (${socket.id}) - ${reason}`);
       });
     });
 

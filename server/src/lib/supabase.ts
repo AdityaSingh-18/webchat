@@ -12,3 +12,24 @@ export const supabase = createClient(
     },
   }
 );
+
+export const createAuthenticatedSupabaseClient = (
+  accessToken: string
+) => {
+  return createClient(
+    env.SUPABASE_URL,
+    env.SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    }
+  );
+};

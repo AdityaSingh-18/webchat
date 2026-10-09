@@ -50,6 +50,16 @@ const formatConnectedDate = (value: string | null) => {
   });
 };
 
+const getInitials = (name: string) => {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase();
+};
+
 export const UserDetails = ({
   user,
   onClose,
@@ -87,14 +97,10 @@ export const UserDetails = ({
               className="h-24 w-24 object-cover rounded-full"
             />
           ) : (
-            <div
-              className="
-                h-24 w-24 rounded-full flex items-center justify-center
-                text-2xl font-semibold text-white
-                bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]
-              "
+            <div className="h-24 w-24 rounded-full flex items-center justify-center text-3xl font-semibold text-white
+              bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
             >
-              {user.name.trim().charAt(0).toUpperCase()}
+              {getInitials(user.name)}
             </div>
           )}
 
@@ -102,24 +108,12 @@ export const UserDetails = ({
             {user.name}
           </p>
 
-          {user.username && (
-            <p className="text-sm text-gray-400">
-              @{user.username}
-            </p>
-          )}
+          {user.username && <p className="text-sm text-gray-400">@{user.username}</p>}
 
           <div className="flex gap-2 items-center mt-1">
-            <div
-              className={`h-2 w-2 rounded-full ${
-                user.online ? "bg-green-400" : "bg-gray-500"
-              }`}
-            />
+            <div className={`h-2 w-2 rounded-full ${user.online ? "bg-green-400" : "bg-gray-500"}`} />
 
-            <p
-              className={`text-sm ${
-                user.online ? "text-green-400" : "text-gray-400"
-              }`}
-            >
+            <p className={`text-sm ${user.online ? "text-green-400" : "text-gray-400"}`}>
               {user.online ? "Online" : "Offline"}
             </p>
           </div>
@@ -143,11 +137,7 @@ export const UserDetails = ({
 
         <div className="flex flex-col justify-center gap-3 p-4">
           <div className="flex gap-4 items-center">
-            <Mail
-              size={22}
-              className="text-cyan-500"
-              strokeWidth={2}
-            />
+            <Mail size={22} className="text-cyan-500" strokeWidth={2} />
 
             <div className="flex flex-col min-w-0">
               <h3 className="text-[13px] text-gray-400">
@@ -161,11 +151,7 @@ export const UserDetails = ({
           </div>
 
           <div className="flex gap-4 items-center">
-            <Phone
-              size={22}
-              className="text-cyan-500"
-              strokeWidth={2}
-            />
+            <Phone size={22} className="text-cyan-500" strokeWidth={2} />
 
             <div className="flex flex-col min-w-0">
               <h3 className="text-[13px] text-gray-400">
@@ -179,11 +165,7 @@ export const UserDetails = ({
           </div>
 
           <div className="flex gap-4 items-center">
-            <Calendar
-              size={22}
-              className="text-cyan-500"
-              strokeWidth={2}
-            />
+            <Calendar size={22} className="text-cyan-500" strokeWidth={2} />
 
             <div className="flex flex-col">
               <h3 className="text-[13px] text-gray-400">
@@ -202,11 +184,7 @@ export const UserDetails = ({
         <div className="flex flex-col justify-center">
           <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Folders
-                size={22}
-                className="text-indigo-500 shrink-0"
-                strokeWidth={2}
-              />
+              <Folders size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
 
               <p className="text-gray-300 text-sm truncate">
                 Media, Docs and Links
@@ -214,24 +192,17 @@ export const UserDetails = ({
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-300">
-                {user.mediaCount ?? "—"}
+              <p className="text-sm text-gray-400">
+                {user.mediaCount ?? "0"}
               </p>
 
-              <ChevronRight
-                size={20}
-                className="text-indigo-500"
-              />
+              <ChevronRight size={20} className="text-indigo-500" />
             </div>
           </div>
 
           <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Star
-                size={22}
-                className="text-indigo-500 shrink-0"
-                strokeWidth={2}
-              />
+              <Star size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
 
               <p className="text-gray-300 text-sm truncate">
                 Starred Messages
@@ -239,24 +210,17 @@ export const UserDetails = ({
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-300">
-                {user.starredCount ?? "—"}
+              <p className="text-sm text-gray-400">
+                {user.starredCount ?? "0"}
               </p>
 
-              <ChevronRight
-                size={22}
-                className="text-indigo-500"
-              />
+              <ChevronRight size={22} className="text-indigo-500" />
             </div>
           </div>
 
           <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Users
-                size={22}
-                className="text-indigo-500 shrink-0"
-                strokeWidth={2}
-              />
+              <Users size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
 
               <p className="text-gray-300 text-sm truncate">
                 Groups in common
@@ -264,14 +228,11 @@ export const UserDetails = ({
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-300">
-                {user.commonGroupsCount ?? "—"}
+              <p className="text-sm text-gray-400">
+                {user.commonGroupsCount ?? "0"}
               </p>
 
-              <ChevronRight
-                size={22}
-                className="text-indigo-500"
-              />
+              <ChevronRight size={22} className="text-indigo-500" />
             </div>
           </div>
         </div>
@@ -280,11 +241,7 @@ export const UserDetails = ({
 
         <div className="flex flex-col justify-center pb-4">
           <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <CircleMinus
-              size={22}
-              className="text-red-600"
-              strokeWidth={2}
-            />
+            <CircleMinus size={22} className="text-red-600" strokeWidth={2} />
 
             <p className="text-red-600 text-sm truncate">
               Clear Chat
@@ -292,11 +249,7 @@ export const UserDetails = ({
           </div>
 
           <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <Ban
-              size={22}
-              className="text-red-600"
-              strokeWidth={2}
-            />
+            <Ban size={22} className="text-red-600" strokeWidth={2} />
 
             <p className="text-red-600 text-sm truncate">
               Block {user.name}
@@ -304,11 +257,7 @@ export const UserDetails = ({
           </div>
 
           <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <Trash
-              size={22}
-              className="text-red-600"
-              strokeWidth={2}
-            />
+            <Trash size={22} className="text-red-600" strokeWidth={2} />
 
             <p className="text-red-600 text-sm truncate">
               Delete Contact
