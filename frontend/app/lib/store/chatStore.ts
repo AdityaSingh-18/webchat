@@ -2,6 +2,9 @@ import type { Socket } from "socket.io-client";
 import { create } from "zustand";
 import { createSocket } from "@/lib/socket/socket";
 
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase/supabaseClient";
+
 export type Tabs =
   | "chat"
   | "group"
@@ -23,6 +26,7 @@ export interface UserProfile {
 
 export interface MessageRecord {
   id: string;
+  conversation_id: string;
   sender_id: string;
   receiver_id: string;
   content: string;
@@ -41,8 +45,11 @@ interface ChatStore {
   setOpenNewChat: (value: boolean) => void;
 
   socket: Socket | null;
+  realtimeChannel: RealtimeChannel | null;
   connectSocket: (accessToken: string) => void;
   disconnectSocket: () => void;
+  connectRealtime: (userId: string) => void;
+  disconnectRealtime: () => void;
 
   messages: Record<string, MessageRecord[]>;
   addMessage: (message: MessageRecord) => void;
@@ -50,6 +57,11 @@ interface ChatStore {
     receiverId: string,
     content: string
   ) => Promise<MessageRecord>;
+
+  prependMessages: (
+    userId: string,
+    messages: MessageRecord[],
+  ) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -64,6 +76,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   messages: {},
   socket: null,
+  realtimeChannel: null,
 
   addMessage: (message) => {
     const currentUserId = get().currentUser?.id;
@@ -95,10 +108,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
+  prependMessages: (userId, messages) => {
+    if (messages.length === 0) {
+      return;
+    }
+
+    set((state) => {
+      const existingMessages = state.messages[userId] ?? [];
+      const combinedMessages = [...messages, ...existingMessages];
+
+      const uniqueMessages = Array.from(
+        new Map(
+          combinedMessages.map((message) => [message.id, message]),
+        ).values(),
+      );
+
+      uniqueMessages.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime(),
+      );
+
+      return {
+        messages: {
+          ...state.messages,
+          [userId]: uniqueMessages,
+        },
+      };
+    });
+  },
 
   connectSocket: (accessToken) => {
-    const existingSocket = get().socket;
+    const currentUser = get().currentUser;
+    if (currentUser) {
+      get().connectRealtime(currentUser.id);
+    }
 
+    const existingSocket = get().socket;
     if (existingSocket) {
       const currentAuth = existingSocket.auth;
 
@@ -130,7 +176,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     const socket = createSocket(accessToken);
-
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
     });
@@ -156,6 +201,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   disconnectSocket: () => {
+    get().disconnectRealtime();
+
     const socket = get().socket;
 
     if (!socket) {
@@ -163,8 +210,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     socket.disconnect();
-    set({socket: null});
+    set({ socket: null });
   },
+
   sendMessage: (receiverId, content) => {
     const socket = get().socket;
 
@@ -198,5 +246,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         );
     });
+  },
+  
+  connectRealtime: (userId) => {
+    const existingChannel = get().realtimeChannel;
+
+    if (existingChannel) {
+      return;
+    }
+
+    const channel = supabase.channel(`messages:${userId}`).on("postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `receiver_id=eq.${userId}`,
+      },
+      (payload) => {
+        const message = payload.new as MessageRecord;
+        get().addMessage(message);
+      },
+    )
+    .subscribe((status) => {
+      console.log("Supabase Realtime status:", status);
+    });
+
+    set({ realtimeChannel: channel });
+  },
+  
+  disconnectRealtime: () => {
+    const channel = get().realtimeChannel;
+
+    if (!channel) {
+      return;
+    }
+
+    void supabase.removeChannel(channel);
+    set({ realtimeChannel: null });
   },
 }));

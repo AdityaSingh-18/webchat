@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef} from "react";
 import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
 
 import {
-  Calendar,
   Info,
   Plus,
   ShieldCheck,
@@ -35,6 +34,16 @@ export const ChatWindow = ({
   const currentUser = useChatStore((state) => state.currentUser);
   const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const prependMessages = useChatStore((state) => state.prependMessages);
+
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousScrollHeightRef = useRef<number | null>(null);
+  const initialLoadRef = useRef(true);
 
   const handleSendMessage = async () => {
     const content = messageInput.trim();
@@ -50,6 +59,97 @@ export const ChatWindow = ({
       toast.error(error instanceof Error ? error.message : "Failed to send message.");
     }
   };
+
+  const loadMessages = async (before?: string) => {
+    if (!userId) {
+      return;
+    }
+
+    if (before) {
+      if (loadingOlder || !hasMoreMessages) {
+        return;
+      }
+      setLoadingOlder(true);
+    } else {
+      setHistoryLoading(true);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        userId,
+        limit: "30",
+      });
+
+      if (before) {
+        params.set("before", before);
+      }
+
+      const response = await fetch(`/api/messages?${params.toString()}`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load messages.");
+      }
+
+      prependMessages(userId, data.messages);
+
+      setHasMoreMessages(data.hasMore);
+      setNextCursor(data.nextCursor);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load messages.");
+    } finally {
+      setHistoryLoading(false);
+      setLoadingOlder(false);
+    }
+  };
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+
+    if (
+      !container ||
+      !nextCursor ||
+      !hasMoreMessages ||
+      loadingOlder
+    ) {
+      return;
+    }
+
+    if (container.scrollTop > 100) {
+      return;
+    }
+
+    previousScrollHeightRef.current = container.scrollHeight;
+    void loadMessages(nextCursor);
+  };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    if (initialLoadRef.current) {
+      if (messages.length > 0) {
+        container.scrollTop = container.scrollHeight;
+      }
+
+      initialLoadRef.current = false;
+      return;
+    }
+
+    const previousScrollHeight = previousScrollHeightRef.current;
+    if (previousScrollHeight === null) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight - previousScrollHeight;
+    previousScrollHeightRef.current = null;
+  }, [messages]);
 
   useEffect(() => {
     setShowDetails(false);
@@ -104,6 +204,21 @@ export const ChatWindow = ({
     };
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId) {
+      setHasMoreMessages(true);
+      setNextCursor(null);
+      initialLoadRef.current = true;
+      return;
+    }
+
+    setHasMoreMessages(true);
+    setNextCursor(null);
+    initialLoadRef.current = true;
+
+    void loadMessages();
+  }, [userId]);
+
   return (
     <>
       {!userId ?
@@ -153,10 +268,8 @@ export const ChatWindow = ({
                     className="shrink-0 h-12 w-12 object-cover rounded-full"
                   />
                 ) : (
-                  <div
-                    className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center  text-white font-semibold
-                      bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]
-                    "
+                  <div className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center  text-white font-semibold
+                    bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
                   >
                     {user?.name?.trim().charAt(0).toUpperCase() || "?"}
                   </div>
@@ -185,50 +298,74 @@ export const ChatWindow = ({
                 </button>
               )}
             </div>
-            <div className="
-              flex-1 w-full min-h-0 overflow-y-auto bg-[#080f1c] 
-              bg-[radial-gradient(circle_at_bottom_left,_rgba(6,100,130,0.35),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(70,25,120,0.3),_transparent_40%)]
-              [&::-webkit-scrollbar]:w-[10px]
-              [&::-webkit-scrollbar-track]:bg-transparent
-              [&::-webkit-scrollbar-thumb]:border-[2px]
-              [&::-webkit-scrollbar-thumb]:rounded-full
-              [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll} 
+              className="flex-1 w-full min-h-0 overflow-y-auto bg-[#080f1c] 
+                bg-[radial-gradient(circle_at_bottom_left,_rgba(6,100,130,0.35),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(70,25,120,0.3),_transparent_40%)]
+                [&::-webkit-scrollbar]:w-[10px]
+                [&::-webkit-scrollbar-track]:bg-transparent
+                [&::-webkit-scrollbar-thumb]:border-[2px]
+                [&::-webkit-scrollbar-thumb]:rounded-full
+                [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
             >
-              <div className="flex items-center justify-center pt-4">
-                <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
-                  <Calendar size={16} /> Wednesday, September 08, 2026
+              
+              {loadingOlder && (
+                <div className="flex justify-center py-3">
+                  <span className="text-xs text-gray-400">
+                    Loading older messages...
+                  </span>
                 </div>
-              </div>
-              <div className="flex flex-col gap-2 px-12 py-4">
-                {messages.map((data) => {
-                  const me = data.sender_id === currentUser?.id;
+              )}
+              {historyLoading ? (
+                <div className="flex justify-center py-6">
+                  <span className="text-sm text-gray-400">
+                    Loading messages...
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 px-12 py-4">
+                  {messages.map((data) => {
+                    const me = data.sender_id === currentUser?.id;
 
-                  return (
-                    <div key={data.id}>
-                      <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
-                        <div className={`w-fit min-w-50 px-4 py-3 text-white
-                          ${me
-                            ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
-                            : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
+                    return (
+                      <div key={data.id}>
+                        <div
+                          className={`flex ${
+                            me ? "justify-end" : "justify-start"
                           }`}
                         >
-                          {data.content}
+                          <div
+                            className={`w-fit min-w-50 px-4 py-3 text-white ${
+                              me
+                                ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
+                                : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
+                            }`}
+                          >
+                            {data.content}
+                          </div>
+                        </div>
+
+                        <div
+                          className={`mt-1.5 text-gray-300 text-[10px] flex ${
+                            me ? "justify-end" : "justify-start"
+                          }`}
+                        >
+                          {new Date(data.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </div>
                       </div>
-                      <div className={`mt-1.5 text-gray-300 text-[10px] flex ${me ? "justify-end" : "justify-start"}`}>
-                        {new Date(data.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="shrink-0 flex gap-3 p-4 bg-[#0a1220] border-t-2 border-gray-800">
               <button className="rounded-full flex items-center justify-center px-2 shadow-lg text-gray-400 cursor-pointer 
-                bg-[#0d1927] hover:bg-gray-800 border border-gray-800 hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]">
+                bg-[#0d1927] hover:bg-gray-800 border border-gray-800 hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]"
+              >
                 <Plus />
               </button>
               <input 
