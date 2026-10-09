@@ -34,6 +34,7 @@ type ChatListProps = {
 type ChatItem = {
   id: string;
   name: string;
+  username?: string | null;
   img?: string | null;
   lastChat?: string;
   chat?: string;
@@ -100,6 +101,7 @@ export const ChatList = ({
   const [newQuery, setNewQuery] = useState("");
   const [newResults, setNewResults] = useState<ConnectedUser[]>([]);
   const [newStatus, setNewStatus] = useState<SearchStatus>("idle");
+  const [chatListStatus, setChatListStatus] = useState<"loading" | "success" | "error">("loading");
   const [newRetryKey, setNewRetryKey] = useState(0);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
@@ -107,7 +109,10 @@ export const ChatList = ({
   const setOpenNewChat = useChatStore((state) => state.setOpenNewChat);
 
   const currentUserId = useChatStore((state) => state.currentUser?.id ?? null);
-  const [chatListStatus, setChatListStatus] = useState<"loading" | "success" | "error">("loading");
+  const onlineUsers = useChatStore((state) => state.onlineUsers);
+
+  const typingUsers = useChatStore((state) => state.typingUsers);
+  const typingToUsers = useChatStore((state) => state.typingToUsers);
   
   const optionsRef = useRef<HTMLDivElement>(null);
 
@@ -146,6 +151,7 @@ export const ChatList = ({
           return {
             id: row.user_id,
             name: row.full_name ?? row.username ?? "Unknown",
+            username: row.username,
             img: row.avatar_url,
             lastChat: formatChatTime(row.last_message_at),
             chat: lastMessage
@@ -656,14 +662,29 @@ export const ChatList = ({
                         }
                       >
                         <div className="flex gap-3">
-                          {chat.img ? (
-                            <img src={chat.img} alt={chat.name} className="shrink-0 h-12 w-12 object-cover rounded-full"/>
-                          ) : (
-                            <div className="shrink-0 h-12 w-12 text-lg rounded-full flex items-center justify-center text-white font-semibold
-                              bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]">
-                              {getInitials(chat?.name ?? "?")}
-                            </div>
-                          )}
+                          <div className="relative shrink-0">
+                            {chat.img ? (
+                              <img
+                                src={chat.img}
+                                alt={chat.name}
+                                className="h-12 w-12 object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="h-12 w-12 text-lg rounded-full flex items-center justify-center
+                                text-white font-semibold bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3]"
+                              >
+                                {getInitials(chat.name ?? "?")}
+                              </div>
+                            )}
+
+                            {onlineUsers[chat.id] && (
+                              <span
+                                title="Online"
+                                aria-label={`${chat.name} is online`}
+                                className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[#0d1927] bg-green-400"
+                              />
+                            )}
+                          </div>
                           <div className="w-full flex flex-col justify-center">
                             <div className="flex flex-row items-center justify-between gap-2">
                               <p className={`truncate font-medium ${isActiveChat ? "text-white" : "text-gray-300"}`}>
@@ -683,9 +704,23 @@ export const ChatList = ({
                                 )}
                               </div>
                             </div>
-                            <p className="w-full text-[13px] truncate text-gray-300">
-                              {chat.chat}
-                            </p>
+                            {(() => {
+                              const otherIsTyping = typingUsers[chat.id] ?? false;
+                              const meIsTyping = typingToUsers[chat.id] ?? false;
+
+                              const isTyping = otherIsTyping || meIsTyping;
+                              const preview = meIsTyping
+                                ? "You: typing..."
+                                : otherIsTyping
+                                  ? `${chat.username?.trim() || chat.name}: typing...`
+                                  : chat.chat;
+
+                              return (
+                                <p className={`w-full text-[13px] truncate ${isTyping ? "text-cyan-400 italic" : "text-gray-300"}`}>
+                                  {preview}
+                                </p>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>

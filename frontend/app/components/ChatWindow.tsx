@@ -70,10 +70,18 @@ export const ChatWindow = ({
   const [newMessageCount, setNewMessageCount] = useState(0);
 
   const currentUser = useChatStore((state) => state.currentUser);
+
+  const startTyping = useChatStore((state) => state.startTyping);
+  const stopTyping = useChatStore((state) => state.stopTyping);
+  const isOtherUserTyping = useChatStore((state) => userId ? state.typingUsers[userId] ?? false : false);
+  
   const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const sendMessage = useChatStore((state) => state.sendMessage);
   const prependMessages = useChatStore((state) => state.prependMessages);
   const markMessagesRead = useChatStore((state) => state.markMessagesRead);
+  const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
+
+  const isTypingRef = useRef(false);
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
@@ -85,12 +93,40 @@ export const ChatWindow = ({
 
   const BOTTOM_THRESHOLD = 120;
 
+  const stopTypingForCurrentChat = () => {
+    if (userId && isTypingRef.current) {
+      stopTyping(userId);
+    }
+
+    isTypingRef.current = false;
+  };
+
+  const handleMessageInputChange = (value: string) => {
+    setMessageInput(value);
+
+    if (!userId) {
+      return;
+    }
+
+    if (!value.trim()) {
+      stopTypingForCurrentChat();
+      return;
+    }
+
+    if (!isTypingRef.current) {
+      startTyping(userId);
+      isTypingRef.current = true;
+    }
+  };
+
   const handleSendMessage = async () => {
     const content = messageInput.trim();
 
     if (!content || !userId) {
       return;
     }
+
+    stopTypingForCurrentChat();
 
     try {
       await sendMessage(userId, content);
@@ -317,6 +353,29 @@ export const ChatWindow = ({
     void markMessagesRead(userId);
   }, [userId, historyLoading, messages, markMessagesRead]);
 
+  useEffect(() => {
+    return () => {
+      if (userId && isTypingRef.current) {
+        stopTyping(userId);
+      }
+
+      isTypingRef.current = false;
+    };
+  }, [userId, stopTyping]);
+
+  useEffect(() => {
+    if (!isOtherUserTyping || !isNearBottomRef.current) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+
+    container?.scrollTo({
+      top: container.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [isOtherUserTyping]);
+
   return (
     <>
       {!userId ?
@@ -379,11 +438,11 @@ export const ChatWindow = ({
                   </p>
 
                   {user && (
-                    <div className="flex gap-2 items-center">
-                      <div className={`h-2 w-2 rounded-full ${user.online ? "bg-green-400" : "bg-gray-500"}`} />
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${isOtherUserOnline ? "bg-green-400" : "bg-gray-500"}`} />
 
-                      <p className={`text-sm truncate ${user.online ? "text-green-400" : "text-gray-400"}`}>
-                        {user.online ? "Online" : "Offline"}
+                      <p className={`text-sm truncate ${isOtherUserOnline ? "text-green-400" : "text-gray-400"}`}>
+                        {isOtherUserOnline ? "Online" : "Offline"}
                       </p>
                     </div>
                   )}
@@ -423,87 +482,118 @@ export const ChatWindow = ({
                     </span>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2 px-12 py-4">
-                    {messages.map((data, index) => {
-                      const me = data.sender_id === currentUser?.id;
-                      const currentDateKey = getDateKey(new Date(data.created_at));
+                  <>
+                    <div className="flex flex-col gap-2 px-12 py-4">
+                      {messages.map((data, index) => {
+                        const me = data.sender_id === currentUser?.id;
+                        const currentDateKey = getDateKey(new Date(data.created_at));
 
-                      const previousDateKey = index > 0
-                        ? getDateKey(new Date(messages[index - 1].created_at))
-                        : null;
-                      const showDateSeparator = currentDateKey !== previousDateKey;
+                        const previousDateKey = index > 0
+                          ? getDateKey(new Date(messages[index - 1].created_at))
+                          : null;
+                        const showDateSeparator = currentDateKey !== previousDateKey;
 
-                      return (
-                        <div key={data.id}>
-                          {showDateSeparator && (() => {
-                            const dateLabel = formatDateSeparator(data.created_at);
-                            const showCalendar = dateLabel !== "Today" && dateLabel !== "Yesterday";
+                        return (
+                          <div key={data.id}>
+                            {showDateSeparator && (() => {
+                              const dateLabel = formatDateSeparator(data.created_at);
+                              const showCalendar = dateLabel !== "Today" && dateLabel !== "Yesterday";
 
-                            return (
-                              <div className="flex items-center justify-center py-2">
-                                <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
-                                  {showCalendar && <Calendar size={16} />}
-                                  {dateLabel}
+                              return (
+                                <div className="flex items-center justify-center py-2">
+                                  <div className="px-3 py-1.5 rounded-xl flex gap-1.5 items-center text-gray-200 text-sm bg-gray-700 border border-gray-600">
+                                    {showCalendar && <Calendar size={16} />}
+                                    {dateLabel}
+                                  </div>
                                 </div>
+                              );
+                            })()}
+                            <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
+                              <div
+                                className={`w-fit min-w-50 px-4 py-3 text-white ${
+                                  me
+                                    ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
+                                    : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
+                                }`}
+                              >
+                                {data.content}
                               </div>
-                            );
-                          })()}
-                          <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
-                            <div
-                              className={`w-fit min-w-50 px-4 py-3 text-white ${
-                                me
-                                  ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"
-                                  : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
-                              }`}
+                            </div>
+
+                            <div className={`mt-1.5 text-gray-300 text-[10px] flex items-center gap-1.5 
+                              ${me ? "justify-end" : "justify-start"}`}
                             >
-                              {data.content}
+                              <span>
+                                {new Date(data.created_at).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+
+                              {me && (
+                                <span title={data.read_at || data.is_read
+                                  ? "Read"
+                                  : data.delivered_at
+                                    ? "Delivered"
+                                    : "Sent"
+                                  }
+                                  aria-label={data.read_at || data.is_read
+                                    ? "Message read"
+                                    : data.delivered_at
+                                      ? "Message delivered"
+                                      : "Message sent"
+                                  }
+                                  className={data.read_at || data.is_read
+                                    ? "text-cyan-300"
+                                    : data.delivered_at
+                                      ? "text-gray-300"
+                                      : "text-gray-500"
+                                  }
+                                >
+                                  {data.read_at || data.is_read ? (
+                                    <CheckCheck size={14} />
+                                  ) : data.delivered_at ? (
+                                    <CheckCheck size={14} />
+                                  ) : (
+                                    <Check size={14} />
+                                  )}
+                                </span>
+                              )}
                             </div>
                           </div>
-
-                          <div className={`mt-1.5 text-gray-300 text-[10px] flex items-center gap-1.5 
-                            ${me ? "justify-end" : "justify-start"}`}
-                          >
-                            <span>
-                              {new Date(data.created_at).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-
-                            {me && (
-                              <span title={data.read_at || data.is_read
-                                ? "Read"
-                                : data.delivered_at
-                                  ? "Delivered"
-                                  : "Sent"
-                                }
-                                aria-label={data.read_at || data.is_read
-                                  ? "Message read"
-                                  : data.delivered_at
-                                    ? "Message delivered"
-                                    : "Message sent"
-                                }
-                                className={data.read_at || data.is_read
-                                  ? "text-cyan-300"
-                                  : data.delivered_at
-                                    ? "text-gray-300"
-                                    : "text-gray-500"
-                                }
-                              >
-                                {data.read_at || data.is_read ? (
-                                  <CheckCheck size={14} />
-                                ) : data.delivered_at ? (
-                                  <CheckCheck size={14} />
-                                ) : (
-                                  <Check size={14} />
-                                )}
-                              </span>
-                            )}
+                        );
+                      })}
+                    {isOtherUserTyping && (
+                      <div
+                        className="flex items-end gap-2"
+                        role="status"
+                        aria-label={`${user?.name ?? "Contact"} is typing`}
+                      >
+                        {user?.avatarUrl ? (
+                          <img
+                            src={user.avatarUrl}
+                            alt={user.name}
+                            className="h-12 w-12 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] text-sm font-semibold text-white">
+                            {getInitials(user?.name ?? "?")}
                           </div>
+                        )}
+
+                        <div className="flex w-fit items-center gap-1.5 rounded-xl rounded-bl-none border border-gray-600 bg-gray-800 px-4 py-2.5">
+                          {[0, 150, 300].map((delay) => (
+                            <span
+                              key={delay}
+                              className="h-1.5 w-1.5 animate-bounce rounded-full bg-white"
+                              style={{ animationDelay: `${delay}ms` }}
+                            />
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    )}
+                    </div>
+                  </>
                 )}
               </div>
               {showScrollToBottom && (
@@ -548,7 +638,7 @@ export const ChatWindow = ({
               <input 
                 type="text"
                 value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
+                onChange={(e) => handleMessageInputChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleSendMessage();

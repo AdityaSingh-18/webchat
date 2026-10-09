@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import { Server } from "socket.io";
 import { getUserRoom } from "./lib/socket/rooms";
 import { registerMessagingHandlers } from "./sockets/messaging";
+import { registerPresenceHandlers } from "./sockets/presence";
 
 import { env } from "./config/env";
 import { supabase } from "./lib/supabase";
@@ -72,6 +73,7 @@ const start = async () => {
 
       socket.join(userRoom);
       registerMessagingHandlers(io, socket);
+      registerPresenceHandlers(io, socket);
       app.log.info(`Authenticated socket connected: ${socket.data.userId} (${socket.id})`);
 
       socket.on("disconnect", (reason) => {

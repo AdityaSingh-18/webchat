@@ -124,8 +124,8 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Day separators based on real message dates
 - [x] Sent / delivered / read receipts
 - [x] Smart chat auto-scrolling, preserved reading position, and new message scroll button
-- [ ] Typing indicators
-- [ ] Online / offline presence
+- [x] Typing indicators
+- [x] Online / offline presence
 - [ ] Working **Unread** and **Online** filters
 - [ ] Clear chat
 

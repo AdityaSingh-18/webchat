@@ -92,6 +92,24 @@ interface ChatStore {
 
   updateMessage: (message: MessageRecord) => void;
   markMessagesRead: (userId: string) => Promise<void>;
+
+  typingUsers: Record<string, boolean>;
+  setTypingStatus: (
+    userId: string,
+    isTyping: boolean,
+  ) => void;
+
+  startTyping: (receiverId: string) => void;
+  stopTyping: (receiverId: string) => void;
+
+  typingToUsers: Record<string, boolean>;
+
+  onlineUsers: Record<string, boolean>;
+  setOnlineUsers: (userIds: string[]) => void;
+  setUserPresence: (
+    userId: string,
+    isOnline: boolean,
+  ) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -107,6 +125,79 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messages: {},
   socket: null,
   realtimeChannel: null,
+  typingUsers: {},
+  typingToUsers: {},
+  onlineUsers: {},
+
+  setOnlineUsers: (userIds) => {
+    set({
+      onlineUsers: Object.fromEntries(
+        userIds.map((userId) => [userId, true]),
+      ),
+    });
+  },
+
+  setUserPresence: (userId, isOnline) => {
+    set((state) => {
+      const onlineUsers = { ...state.onlineUsers };
+
+      if (isOnline) {
+        onlineUsers[userId] = true;
+      } else {
+        delete onlineUsers[userId];
+      }
+
+      return { onlineUsers };
+    });
+  },
+
+  setTypingStatus: (userId, isTyping) => {
+    set((state) => {
+      const typingUsers = { ...state.typingUsers };
+
+      if (isTyping) {
+        typingUsers[userId] = true;
+      } else {
+        delete typingUsers[userId];
+      }
+
+      return { typingUsers };
+    });
+  },
+
+  startTyping: (receiverId) => {
+    set((state) => ({
+      typingToUsers: {
+        ...state.typingToUsers,
+        [receiverId]: true,
+      },
+    }));
+
+    const socket = get().socket;
+    if (socket?.connected) {
+      socket.emit("typing", {
+        receiverId,
+        isTyping: true,
+      });
+    }
+  },
+
+  stopTyping: (receiverId) => {
+    set((state) => {
+      const typingToUsers = { ...state.typingToUsers };
+      delete typingToUsers[receiverId];
+
+      return { typingToUsers };
+    });
+
+    const socket = get().socket;
+    if (socket?.connected) {
+      socket.emit("typing", {
+        receiverId,
+        isTyping: false,
+      });
+    }
+  },
 
   addMessage: (message) => {
     const currentUserId = get().currentUser?.id;
@@ -302,9 +393,49 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       console.error("Socket connection error:", error.message);
     });
 
+    socket.on("presence_snapshot",
+      (payload: { onlineUserIds?: unknown }) => {
+        if (!Array.isArray(payload?.onlineUserIds)) {
+          return;
+        }
+
+        const onlineUserIds = payload.onlineUserIds.filter(
+          (id): id is string => typeof id === "string",
+        );
+
+        console.log("[Presence] Snapshot received:", onlineUserIds);
+        get().setOnlineUsers(onlineUserIds);
+      },
+    );
+
+    socket.on("user_presence",
+      (payload: { userId: string; isOnline: boolean }) => {
+        if (typeof payload?.userId !== "string" || typeof payload?.isOnline !== "boolean") {
+          return;
+        }
+
+        console.log("[Presence] Status received:", payload);
+        get().setUserPresence(payload.userId, payload.isOnline);
+      },
+    );
+
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
+      set({ onlineUsers: {} });
     });
+
+    socket.on("user_typing",
+      (payload: { userId: string; isTyping: boolean }) => {
+        if (typeof payload?.userId !== "string" || typeof payload?.isTyping !== "boolean") {
+          return;
+        }
+
+        get().setTypingStatus(
+          payload.userId,
+          payload.isTyping,
+        );
+      },
+    );
 
     socket.on("new_message", (message: MessageRecord) => {
       get().addMessage(message);
