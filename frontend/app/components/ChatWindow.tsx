@@ -14,6 +14,8 @@ import {
   Info,
   Plus,
   ShieldCheck,
+  EllipsisVertical,
+  Trash2
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -68,6 +70,11 @@ export const ChatWindow = ({
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const [isSending, setIsSending] = useState(false);
+
+  const [showChatOptions, setShowChatOptions] = useState(false);
+  const [showClearChatConfirmation, setShowClearChatConfirmation] = useState(false);
+  const [isClearingChat, setIsClearingChat] = useState(false);
 
   const currentUser = useChatStore((state) => state.currentUser);
 
@@ -81,7 +88,10 @@ export const ChatWindow = ({
   const markMessagesRead = useChatStore((state) => state.markMessagesRead);
   const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
 
+  const clearConversationMessages = useChatStore((state) => state.clearConversationMessages);
+
   const isTypingRef = useRef(false);
+  const isSendingRef = useRef(false);
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
@@ -120,19 +130,32 @@ export const ChatWindow = ({
   };
 
   const handleSendMessage = async () => {
-    const content = messageInput.trim();
+    if (isSendingRef.current) {
+      return;
+    }
 
+    const inputAtSend = messageInput;
+
+    const content = inputAtSend.trim();
     if (!content || !userId) {
       return;
     }
+
+    isSendingRef.current = true;
+    setIsSending(true);
 
     stopTypingForCurrentChat();
 
     try {
       await sendMessage(userId, content);
-      setMessageInput("");
+      setMessageInput((currentInput) =>
+        currentInput === inputAtSend ? "" : currentInput,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to send message.");
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
     }
   };
 
@@ -376,6 +399,56 @@ export const ChatWindow = ({
     });
   }, [isOtherUserTyping]);
 
+  const handleClearChat = async () => {
+    if (!userId || isClearingChat) {
+      return;
+    }
+
+    setIsClearingChat(true);
+
+    try {
+      const response = await fetch("/api/chats/clear", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to clear chat.");
+      }
+
+      clearConversationMessages(userId);
+
+      setNextCursor(null);
+      setHasMoreMessages(true);
+      setNewMessageCount(0);
+      setShowScrollToBottom(false);
+
+      previousScrollHeightRef.current = null;
+      lastMessageIdRef.current = null;
+      isNearBottomRef.current = true;
+
+      setShowClearChatConfirmation(false);
+      setShowChatOptions(false);
+
+      window.dispatchEvent(new Event("webchat:chat-cleared"));
+
+      toast.success("Chat cleared.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to clear chat.",
+      );
+    } finally {
+      setIsClearingChat(false);
+    }
+  };
+
   return (
     <>
       {!userId ?
@@ -438,8 +511,9 @@ export const ChatWindow = ({
                   </p>
 
                   {user && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <div className={`h-2 w-2 rounded-full ${isOtherUserOnline ? "bg-green-400" : "bg-gray-500"}`} />
+                      {isOtherUserOnline && <div className="absolute animate-[ping_1.5s_ease-in-out_infinite] h-2 w-2 rounded-full bg-green-400" />}
 
                       <p className={`text-sm truncate ${isOtherUserOnline ? "text-green-400" : "text-gray-400"}`}>
                         {isOtherUserOnline ? "Online" : "Offline"}
@@ -450,9 +524,43 @@ export const ChatWindow = ({
               </div>
 
               {user && (
-                <button onClick={() => setShowDetails((value) => !value)} aria-label="Show user details">
-                  <Info className="text-cyan-600 stroke-[3] cursor-pointer hover:text-cyan-500" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowChatOptions((value) => !value)}
+                      aria-label="Chat options"
+                      aria-expanded={showChatOptions}
+                      className="text-white cursor-pointer p-2 rounded-full hover:bg-white/5 hover:text-white transition"
+                    >
+                      <EllipsisVertical size={22} />
+                    </button>
+
+                    {showChatOptions && (
+                      <div className="absolute right-0 top-full z-50 w-40 rounded-xl bg-[#162235] border border-gray-700 shadow-lg shadow-white/5 p-1 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowChatOptions(false);
+                            setShowClearChatConfirmation(true);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-300 hover:text-white hover:bg-red-600 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={16} />
+                          Clear chat
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDetails((value) => !value)}
+                    aria-label="Show user details"
+                  >
+                    <Info className="cursor-pointer text-cyan-600 stroke-[3] hover:text-cyan-500" />
+                  </button>
+                </div>
               )}
             </div>
             <div className="relative flex-1 w-full min-h-0">
@@ -640,16 +748,26 @@ export const ChatWindow = ({
                 value={messageInput}
                 onChange={(e) => handleMessageInputChange(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSendMessage();
+                  if (e.key !== "Enter" || e.nativeEvent.isComposing) {
+                    return;
+                  }
+
+                  e.preventDefault();
+                  if (!e.repeat) {
+                    void handleSendMessage();
                   }
                 }}
                 className="flex-1 px-3 py-2 placeholder:text-gray-400 text-white bg-[#0d1927] focus:bg-gray-800 outline-none border border-gray-800 rounded-2xl"
                 placeholder="Write a message..."
               />
-              <button onClick={handleSendMessage} className="flex items-center justify-center shrink-0 px-2.5 py-1.5
-                rounded-full cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 
-                bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]">
+              <button 
+                onClick={handleSendMessage}
+                disabled={isSending} 
+                className="flex items-center justify-center shrink-0 px-2.5 py-1.5
+                  rounded-full cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 
+                  bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]
+                   disabled:opacity-80 disabled:cursor-not-allowed"
+              >
                 <img src="./send-icon.svg" alt="send icon" className="h-6 w-6 invert"/>
               </button>
             </div>
@@ -659,6 +777,49 @@ export const ChatWindow = ({
               user={user}
               onClose={() => setShowDetails(false)}
             />
+          )}
+          {showClearChatConfirmation && user && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="clear-chat-title"
+                className="w-full max-w-sm rounded-xl border border-gray-700 bg-[#101d2d] p-6 shadow-2xl"
+              >
+                <h2
+                  id="clear-chat-title"
+                  className="text-lg font-semibold text-white"
+                >
+                  Clear this chat?
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-gray-400">
+                  Messages will be cleared from your view only. The other
+                  person will keep their message history, and new messages
+                  can still arrive.
+                </p>
+
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    disabled={isClearingChat}
+                    onClick={() => setShowClearChatConfirmation(false)}
+                    className="rounded-lg px-4 py-2 text-sm text-white transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isClearingChat}
+                    onClick={() => void handleClearChat()}
+                    className="rounded-lg bg-red-500 cursor-pointer px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isClearingChat ? "Clearing..." : "Clear chat"}
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </>
       }

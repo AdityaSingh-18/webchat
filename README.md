@@ -65,8 +65,8 @@ This README doubles as the project's progress tracker. Update the relevant check
 | 2 | Connections | ✅ Done |
 | 3 | Profile | ✅ Done |
 | 4 | Chat UI shell | ✅ Done |
-| 5 | Real-time 1:1 messaging | 🚧 In progress |
-| 6 | Media & attachments | ⏳ Planned |
+| 5 | Real-time 1:1 messaging | ✅ Done |
+| 6 | Media & attachments | 🚧 In progress |
 | 7 | Starred & message actions | ⏳ Planned |
 | 8 | Groups | ⏳ Planned |
 | 9 | Account, privacy & settings | ⏳ Planned |
@@ -113,23 +113,23 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] User information panel with profile and connection details
 - [x] Loading skeletons, empty states, and retry-on-error states
 
-### Phase 5 — Real-time 1:1 messaging 🚧
+### Phase 5 — Real-time 1:1 messaging ✅
 
 - [x] Database schema for conversations and messages, with Row Level Security
 - [x] Send and receive text messages between connected users
 - [x] Real-time message updates through the messaging/Realtime integration
 - [x] Message history with pagination and load-older-on-scroll behavior
 - [x] Chat list for accepted connections with latest-message preview and timestamp
-- [ ] Verify unread counts and unread badge updates end to end
+- [x] Verify unread counts and unread badge updates end to end
 - [x] Day separators based on real message dates
 - [x] Sent / delivered / read receipts
 - [x] Smart chat auto-scrolling, preserved reading position, and new message scroll button
 - [x] Typing indicators
 - [x] Online / offline presence
-- [ ] Working **Unread** and **Online** filters
-- [ ] Clear chat
+- [x] Working **Unread** and **Online** filters
+- [x] Clear chat
 
-### Phase 6 — Media & attachments ⏳
+### Phase 6 — Media & attachments 🚧
 
 - [ ] Attach button for images, documents, and other files
 - [ ] Supabase Storage setup and access policies for chat media

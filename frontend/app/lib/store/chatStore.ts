@@ -110,6 +110,8 @@ interface ChatStore {
     userId: string,
     isOnline: boolean,
   ) => void;
+
+  clearConversationMessages: (userId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -345,6 +347,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }),
     );
+  },
+
+  clearConversationMessages: (userId) => {
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [userId]: [],
+      },
+    }));
   },
 
   connectSocket: (accessToken) => {

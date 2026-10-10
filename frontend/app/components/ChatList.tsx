@@ -176,10 +176,24 @@ export const ChatList = ({
       void loadChats();
     };
 
+    const handleChatCleared = () => {
+      void loadChats();
+    };
+
     window.addEventListener("focus", handleFocus);
+
+    window.addEventListener(
+      "webchat:chat-cleared",
+      handleChatCleared,
+    );
 
     return () => {
       window.removeEventListener("focus", handleFocus);
+
+      window.removeEventListener(
+        "webchat:chat-cleared",
+        handleChatCleared,
+      );
     };
   }, [loadChats]);
 
@@ -394,7 +408,23 @@ export const ChatList = ({
   };
 
   const isSearching = query.trim().length > 0;
-  const showList = isSearching ? status === "success" && results.length > 0 : chats.length > 0;
+  const filteredChats = chats.filter((chat) => {
+    switch (activeFilter) {
+      case "unread":
+        return Number(chat.messageCount ?? 0) > 0;
+
+      case "online":
+        return Boolean(onlineUsers[chat.id]);
+
+      case "groups":
+        return false;
+
+      default:
+        return true;
+    }
+  });
+
+  const showList = isSearching ? status === "success" && results.length > 0 : filteredChats.length > 0;
   const isNewSearching = newQuery.trim().length > 0;
 
   return (
@@ -568,7 +598,7 @@ export const ChatList = ({
             </div>
           )}
 
-        {!isSearching && chatListStatus === "error" && chats.length === 0 && (
+          {!isSearching && chatListStatus === "error" && chats.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 px-8 pb-16">
               <TriangleAlert size={26} className="text-gray-300" />
 
@@ -611,6 +641,25 @@ export const ChatList = ({
               </button>
             </div>
           )}
+          {!isSearching && chatListStatus === "success" && chats.length > 0 && filteredChats.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-8 pb-16">
+              <p className="text-white font-semibold">
+                {activeFilter === "unread"
+                  ? "No unread chats"
+                  : activeFilter === "online"
+                    ? "No contacts online"
+                    : "No group chats yet"}
+              </p>
+
+              <p className="text-[13px] text-gray-400">
+                {activeFilter === "unread"
+                  ? "You're all caught up on your conversations."
+                  : activeFilter === "online"
+                    ? "Your contacts will appear here when they come online."
+                    : "Group conversations aren't available yet."}
+              </p>
+            </div>
+          )}
           {showList && (
             <div className="
               flex-1 min-h-0 overflow-y-auto px-2 flex flex-col
@@ -648,7 +697,7 @@ export const ChatList = ({
                       </div>
                     </div>
                   ))
-                : chats.map((chat) => {
+                : filteredChats.map((chat) => {
                     const isActiveChat = activeChat === chat.id;
                     return (
                       <div 

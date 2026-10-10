@@ -85,6 +85,26 @@ export async function GET(request: Request) {
       });
     }
 
+    const { data: clearState, error: clearStateError } =
+      await supabase
+        .from("conversation_user_state")
+        .select("cleared_at")
+        .eq("conversation_id", conversation.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (clearStateError) {
+      console.error("Load chat clear state error:", clearStateError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to load messages.",
+        },
+        { status: 500 },
+      );
+    }
+
     let query = supabase
       .from("messages")
       .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
@@ -93,6 +113,10 @@ export async function GET(request: Request) {
         ascending: false,
       })
       .limit(limit + 1);
+    
+    if (clearState?.cleared_at) {
+      query = query.gt("created_at", clearState.cleared_at);
+    }
 
     if (before) {
       query = query.lt("created_at", before);

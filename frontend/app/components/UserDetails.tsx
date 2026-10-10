@@ -173,57 +173,57 @@ export const UserDetails = ({
         <div className="border border-slate-800" />
 
         <div className="flex flex-col justify-center">
-          <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+          <div className="group flex gap-4 items-center justify-between px-4 py-3 hover:bg-white/10 rounded-lg cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Folders size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
+              <Folders size={22} className="text-indigo-500 group-hover:text-indigo-600 shrink-0" strokeWidth={2} />
 
-              <p className="text-gray-300 text-sm truncate">
+              <p className="text-gray-300 group-hover:text-white text-sm truncate">
                 Media, Docs and Links
               </p>
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-400 group-hover:text-white">
                 {user.mediaCount ?? "0"}
               </p>
 
-              <ChevronRight size={20} className="text-indigo-500" />
+              <ChevronRight size={20} className="text-indigo-500 group-hover:text-indigo-600" />
             </div>
           </div>
 
-          <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+          <div className="group flex gap-4 items-center justify-between px-4 py-3 hover:bg-white/10 rounded-lg cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Star size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
+              <Star size={22} className="text-indigo-500 group-hover:text-indigo-600 shrink-0" strokeWidth={2} />
 
-              <p className="text-gray-300 text-sm truncate">
+              <p className="text-gray-300 group-hover:text-white text-sm truncate">
                 Starred Messages
               </p>
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-400 group-hover:text-white">
                 {user.starredCount ?? "0"}
               </p>
 
-              <ChevronRight size={22} className="text-indigo-500" />
+              <ChevronRight size={22} className="text-indigo-500 group-hover:text-indigo-600" />
             </div>
           </div>
 
-          <div className="flex gap-4 items-center justify-between p-4 hover:bg-white/10 rounded-xl cursor-pointer">
+          <div className="group flex gap-4 items-center justify-between px-4 py-3 hover:bg-white/10 rounded-lg cursor-pointer">
             <div className="flex gap-4 items-center min-w-0">
-              <Users size={22} className="text-indigo-500 shrink-0" strokeWidth={2} />
+              <Users size={22} className="text-indigo-500 group-hover:text-indigo-600 shrink-0" strokeWidth={2} />
 
-              <p className="text-gray-300 text-sm truncate">
+              <p className="text-gray-300 group-hover:text-white text-sm truncate">
                 Groups in common
               </p>
             </div>
 
             <div className="flex gap-1 items-center shrink-0">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-400 group-hover:text-white">
                 {user.commonGroupsCount ?? "0"}
               </p>
 
-              <ChevronRight size={22} className="text-indigo-500" />
+              <ChevronRight size={22} className="text-indigo-500 group-hover:text-indigo-600" />
             </div>
           </div>
         </div>
@@ -231,26 +231,26 @@ export const UserDetails = ({
         <div className="border border-slate-800" />
 
         <div className="flex flex-col justify-center pb-4">
-          <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <CircleMinus size={22} className="text-red-600" strokeWidth={2} />
+          <div className="group flex gap-4 items-center px-4 py-3 rounded-lg hover:bg-red-600 cursor-pointer">
+            <CircleMinus size={22} className="text-red-600 group-hover:text-white" strokeWidth={2} />
 
-            <p className="text-red-600 text-sm truncate">
+            <p className="text-red-600 group-hover:text-white text-sm truncate">
               Clear Chat
             </p>
           </div>
 
-          <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <Ban size={22} className="text-red-600" strokeWidth={2} />
+          <div className="group flex gap-4 items-center px-4 py-3 rounded-lg hover:bg-red-600 cursor-pointer">
+            <Ban size={22} className="text-red-600 group-hover:text-white" strokeWidth={2} />
 
-            <p className="text-red-600 text-sm truncate">
+            <p className="text-red-600 group-hover:text-white text-sm truncate">
               Block {user.name}
             </p>
           </div>
 
-          <div className="flex gap-4 items-center p-4 hover:bg-red-400/10 rounded-xl cursor-pointer">
-            <Trash size={22} className="text-red-600" strokeWidth={2} />
+          <div className="group flex gap-4 items-center px-4 py-3 rounded-lg hover:bg-red-600 cursor-pointer">
+            <Trash size={22} className="text-red-600 group-hover:text-white" strokeWidth={2} />
 
-            <p className="text-red-600 text-sm truncate">
+            <p className="text-red-600 group-hover:text-white text-sm truncate">
               Delete Contact
             </p>
           </div>
