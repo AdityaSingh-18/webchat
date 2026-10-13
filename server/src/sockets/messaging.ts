@@ -6,7 +6,7 @@ import { createAuthenticatedSupabaseClient } from "../lib/supabase";
 import { getUserRoom } from "../lib/socket/rooms";
 import { createRateLimiter } from "../lib/socket/rateLimiter";
 
-import { createMessage, type MessageRecord} from "../services/message.service";
+import { createMessage, getOrCreateConversation, type MessageRecord} from "../services/message.service";
 import { sendMessageSchema } from "../schemas/message.schema";
 
 interface SendMessageResponse {
@@ -16,6 +16,25 @@ interface SendMessageResponse {
 }
 
 type SendMessageAck = (response: SendMessageResponse) => void;
+
+interface PrepareAttachmentUploadResponse {
+  success: boolean;
+  conversationId?: string;
+  error?: string;
+}
+
+type PrepareAttachmentUploadAck = (
+  response: PrepareAttachmentUploadResponse,
+) => void;
+
+const prepareAttachmentUploadSchema = z.object({
+  receiverId: z.uuid(),
+});
+
+const prepareAttachmentUploadRateLimiter = createRateLimiter({
+  limit: 10,
+  windowMs: 10_000,
+});
 
 const sendMessageRateLimiter = createRateLimiter({
   limit: 30,
@@ -39,8 +58,97 @@ export const registerMessagingHandlers = (
   const activeTypingRecipients = new Set<string>();
   const typingEventVersions = new Map<string, number>();
 
-  socket.on(
-    "send_message",
+  socket.on("prepare_attachment_upload",
+    async (
+      payload: unknown,
+      ack?: PrepareAttachmentUploadAck,
+    ) => {
+      const respond = ack ?? (() => {});
+      const senderId = socket.data.userId;
+
+      if (!prepareAttachmentUploadRateLimiter.check(senderId)) {
+        respond({
+          success: false,
+          error: "Too many upload requests. Please slow down.",
+        });
+        return;
+      }
+
+      const result = prepareAttachmentUploadSchema.safeParse(payload);
+      if (!result.success) {
+        respond({
+          success: false,
+          error: "Invalid attachment upload request.",
+        });
+        return;
+      }
+
+      const { receiverId } = result.data;
+      if (receiverId === senderId) {
+        respond({
+          success: false,
+          error: "You cannot send attachments to yourself.",
+        });
+        return;
+      }
+
+      const accessToken = socket.data.accessToken;
+      if (typeof accessToken !== "string" || !accessToken) {
+        respond({
+          success: false,
+          error: "Authentication required.",
+        });
+        return;
+      }
+
+      try {
+        const supabase = createAuthenticatedSupabaseClient(accessToken);
+
+        const { data: connection, error: connectionError } =
+          await supabase
+            .from("connections")
+            .select("id")
+            .eq("status", "accepted")
+            .or(`and(user_id.eq.${senderId},contact_id.eq.${receiverId}),and(user_id.eq.${receiverId},contact_id.eq.${senderId})`)
+            .limit(1)
+            .maybeSingle();
+
+        if (connectionError) {
+          throw new Error("Failed to validate connection.", {
+            cause: connectionError,
+          });
+        }
+
+        if (!connection) {
+          respond({
+            success: false,
+            error: "You can only send attachments to accepted connections.",
+          });
+          return;
+        }
+
+        const conversationId = await getOrCreateConversation({
+          senderId,
+          receiverId,
+          accessToken,
+        });
+
+        respond({
+          success: true,
+          conversationId,
+        });
+      } catch (error) {
+        console.error("Failed to prepare attachment upload:", error);
+
+        respond({
+          success: false,
+          error: "Failed to prepare attachment upload.",
+        });
+      }
+    },
+  );
+
+  socket.on("send_message",
     async (payload: unknown, ack?: SendMessageAck) => {
       const respond = ack ?? (() => {});
       if (!sendMessageRateLimiter.check(socket.data.userId)) {
@@ -60,7 +168,7 @@ export const registerMessagingHandlers = (
         return;
       }
 
-      const { receiverId, content } = result.data;
+      const { receiverId, content, attachments } = result.data;
       if (receiverId === socket.data.userId) {
         respond({
           success: false,
@@ -85,6 +193,7 @@ export const registerMessagingHandlers = (
           input: {
             receiverId,
             content,
+            attachments,
           },
         });
 

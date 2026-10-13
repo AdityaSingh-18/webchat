@@ -5,6 +5,63 @@ import { createSocket } from "@/lib/socket/socket";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/supabaseClient";
 
+export type Tabs =
+  | "chat"
+  | "group"
+  | "requests"
+  | "starred"
+  | "settings"
+  | "profile"
+
+export interface UserProfile {
+  id: string;
+  full_name: string;
+  username: string;
+  email: string;
+  phone_number: string;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at: string;
+}
+
+export interface MessageAttachmentInput {
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface MessageAttachmentRecord {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  uploaded_by: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+interface PrepareAttachmentUploadResponse {
+  success: boolean;
+  conversationId?: string;
+  error?: string;
+}
+
+export interface MessageRecord {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
+  attachments?: MessageAttachmentRecord[];
+}
+
 const deliveryRequestsInFlight = new Set<string>();
 const readRequestsInFlight = new Set<string>();
 
@@ -30,37 +87,6 @@ const requestDeliveredReceipt = async (messageId: string) => {
   }
 };
 
-export type Tabs =
-  | "chat"
-  | "group"
-  | "requests"
-  | "starred"
-  | "settings"
-  | "profile"
-
-export interface UserProfile {
-  id: string;
-  full_name: string;
-  username: string;
-  email: string;
-  phone_number: string;
-  avatar_url: string | null;
-  bio: string | null;
-  created_at: string;
-}
-
-export interface MessageRecord {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  receiver_id: string;
-  content: string;
-  is_read: boolean;
-  created_at: string;
-  delivered_at: string | null;
-  read_at: string | null;
-}
-
 interface ChatStore {
   activeTab: Tabs;
   setActiveTab: (tab: Tabs) => void;
@@ -80,9 +106,15 @@ interface ChatStore {
 
   messages: Record<string, MessageRecord[]>;
   addMessage: (message: MessageRecord) => void;
+  
+  prepareAttachmentUpload: (
+    receiverId: string,
+  ) => Promise<string>;
+
   sendMessage: (
     receiverId: string,
-    content: string
+    content: string,
+    attachments?: MessageAttachmentInput[],
   ) => Promise<MessageRecord>;
 
   prependMessages: (
@@ -219,8 +251,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => {
       const existingMessages = state.messages[conversationUserId] ?? [];
 
-      if (existingMessages.some((existingMessage) => existingMessage.id === message.id,)) {
-        return state;
+      const existingMessage = existingMessages.find(
+        (item) => item.id === message.id,
+      );
+
+      if (existingMessage) {
+        const mergedMessage: MessageRecord = {
+          ...existingMessage,
+          ...message,
+          attachments:
+            message.attachments && message.attachments.length > 0
+              ? message.attachments
+              : existingMessage.attachments,
+        };
+
+        return {
+          messages: {
+            ...state.messages,
+            [conversationUserId]: existingMessages.map((item) =>
+              item.id === message.id ? mergedMessage : item,
+            ),
+          },
+        };
       }
 
       return {
@@ -473,7 +525,44 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ socket: null });
   },
 
-  sendMessage: (receiverId, content) => {
+  prepareAttachmentUpload: (receiverId) => {
+    const socket = get().socket;
+
+    if (!socket || !socket.connected) {
+      return Promise.reject(
+        new Error("Socket is not connected"),
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      socket.timeout(5000).emit("prepare_attachment_upload",
+        { receiverId },
+        (
+          error: Error | null,
+          response: PrepareAttachmentUploadResponse,
+        ) => {
+          if (error) {
+            reject(new Error("Preparing attachment upload timed out"));
+            return;
+          }
+
+          if (!response?.success || !response.conversationId) {
+            reject(
+              new Error(
+                response?.error ??
+                  "Failed to prepare attachment upload",
+              ),
+            );
+            return;
+          }
+
+          resolve(response.conversationId);
+        },
+      );
+    });
+  },
+
+  sendMessage: (receiverId, content, attachments = []) => {
     const socket = get().socket;
 
     if (!socket || !socket.connected) {
@@ -482,7 +571,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     return new Promise((resolve, reject) => {
       socket.timeout(5000).emit("send_message",
-        {receiverId, content},
+        {receiverId, content, attachments},
           (
             error: Error | null,
             response: {
