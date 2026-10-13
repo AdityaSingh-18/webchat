@@ -60,7 +60,7 @@ export default function page () {
   return (
     <div className="relative flex items-center justify-center min-h-screen">
       <div className="fixed z-0 w-full h-full inset-0">
-        <img src="./images/background.png" alt="background" className="h-full w-full object-cover"/>
+        <img src="./images/background.webp" alt="background" className="h-full w-full object-cover"/>
       </div>
 
       <div className="relative text-white max-w-xs md:min-w-lg">

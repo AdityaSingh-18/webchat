@@ -42,7 +42,7 @@ export default function page () {
   return (
     <div className="flex items-center justify-center h-screen overflow-y-auto">
       <div className="absolute z-0 w-full h-screen">
-        <img src="./images/background.png" alt="background" className="h-full w-full object-cover"/>
+        <img src="./images/background.webp" alt="background" className="h-full w-full object-cover"/>
       </div>
 
       <div className="relative text-white max-w-xs md:max-w-sm">

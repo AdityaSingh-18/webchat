@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef} from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  type ChangeEvent,
+} from "react";
 import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
 
 import {UserDetails, type UserDetailsData} from "@/components/UserDetails";
@@ -15,15 +20,66 @@ import {
   Plus,
   ShieldCheck,
   EllipsisVertical,
-  Trash2
+  Trash2,
+  FileText,
+  Image as ImageIcon,
+  Video,
+  Camera,
+  Music,
+  Contact,
+  Download,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+const ATTACHMENT_OPTIONS = [
+  {
+    label: "Document",
+    icon: FileText,
+    iconClass: "text-blue-400",
+  },
+  {
+    label: "Photos",
+    icon: ImageIcon,
+    iconClass: "text-purple-400",
+  },
+  {
+    label: "Videos",
+    icon: Video,
+    iconClass: "text-pink-400",
+  },
+  {
+    label: "Camera",
+    icon: Camera,
+    iconClass: "text-red-400",
+  },
+  {
+    label: "Audio",
+    icon: Music,
+    iconClass: "text-orange-400",
+  },
+  {
+    label: "Contact",
+    icon: Contact,
+    iconClass: "text-green-400",
+  },
+] as const;
+
+type AttachmentKind = "document" | "photo" | "video" | "audio";
+
+type PendingAttachment = {
+  id: string;
+  file: File;
+  kind: AttachmentKind;
+  previewUrl: string;
+};
 
 type ChatWindowProps = {
   userId: string | null;
 };
 
 const EMPTY_MESSAGES: MessageRecord[] = [];
+const MAX_ATTACHMENT_SIZE = 100 * 1024 * 1024;
 
 const getDateKey = (date: Date) => {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
@@ -53,12 +109,24 @@ const formatDateSeparator = (value: string) => {
   });
 };
 
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export const ChatWindow = ({
   userId,
 }: ChatWindowProps) => {
   const [messageInput, setMessageInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
-
+  
   const [user, setUser] = useState<UserDetailsData | null>(null);
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState("");
@@ -75,6 +143,10 @@ export const ChatWindow = ({
   const [showChatOptions, setShowChatOptions] = useState(false);
   const [showClearChatConfirmation, setShowClearChatConfirmation] = useState(false);
   const [isClearingChat, setIsClearingChat] = useState(false);
+
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [selectedAttachments, setSelectedAttachments] = useState<PendingAttachment[]>([]);
+  const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
 
   const currentUser = useChatStore((state) => state.currentUser);
 
@@ -101,63 +173,15 @@ export const ChatWindow = ({
   const activeChatUserIdRef = useRef<string | null>(null);
   const isNearBottomRef = useRef(true);
 
+  const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+
+  const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set());
+
   const BOTTOM_THRESHOLD = 120;
-
-  const stopTypingForCurrentChat = () => {
-    if (userId && isTypingRef.current) {
-      stopTyping(userId);
-    }
-
-    isTypingRef.current = false;
-  };
-
-  const handleMessageInputChange = (value: string) => {
-    setMessageInput(value);
-
-    if (!userId) {
-      return;
-    }
-
-    if (!value.trim()) {
-      stopTypingForCurrentChat();
-      return;
-    }
-
-    if (!isTypingRef.current) {
-      startTyping(userId);
-      isTypingRef.current = true;
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (isSendingRef.current) {
-      return;
-    }
-
-    const inputAtSend = messageInput;
-
-    const content = inputAtSend.trim();
-    if (!content || !userId) {
-      return;
-    }
-
-    isSendingRef.current = true;
-    setIsSending(true);
-
-    stopTypingForCurrentChat();
-
-    try {
-      await sendMessage(userId, content);
-      setMessageInput((currentInput) =>
-        currentInput === inputAtSend ? "" : currentInput,
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send message.");
-    } finally {
-      isSendingRef.current = false;
-      setIsSending(false);
-    }
-  };
 
   const loadMessages = async (before?: string) => {
     if (!userId) {
@@ -206,6 +230,62 @@ export const ChatWindow = ({
     }
   };
 
+  const stopTypingForCurrentChat = () => {
+    if (userId && isTypingRef.current) {
+      stopTyping(userId);
+    }
+
+    isTypingRef.current = false;
+  };
+
+  const handleMessageInputChange = (value: string) => {
+    setMessageInput(value);
+
+    if (!userId) {
+      return;
+    }
+
+    if (!value.trim()) {
+      stopTypingForCurrentChat();
+      return;
+    }
+
+    if (!isTypingRef.current) {
+      startTyping(userId);
+      isTypingRef.current = true;
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (isSendingRef.current) {
+      return;
+    }
+
+    const inputAtSend = messageInput;
+
+    const content = inputAtSend.trim();
+    if (!content || !userId) {
+      return;
+    }
+
+    isSendingRef.current = true;
+    setIsSending(true);
+    
+    stopTypingForCurrentChat();
+
+    try {
+      await sendMessage(userId, content);
+      setMessageInput((currentInput) =>
+        currentInput === inputAtSend ? "" : currentInput,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send message.");
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
+    }
+  };
+
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
 
@@ -232,6 +312,161 @@ export const ChatWindow = ({
 
     previousScrollHeightRef.current = container.scrollHeight;
     void loadMessages(nextCursor);
+  };
+
+  const handleAttachmentOptionClick = (
+    label: (typeof ATTACHMENT_OPTIONS)[number]["label"],
+  ) => {
+    setShowAttachmentMenu(false);
+
+    switch (label) {
+      case "Document":
+        documentInputRef.current?.click();
+        break;
+
+      case "Photos":
+        photoInputRef.current?.click();
+        break;
+
+      case "Videos":
+        videoInputRef.current?.click();
+        break;
+
+      case "Audio":
+        audioInputRef.current?.click();
+        break;
+
+      case "Camera":
+      case "Contact":
+        break;
+    }
+  };
+
+  const handleFilesSelected = (
+    event: ChangeEvent<HTMLInputElement>,
+    kind: AttachmentKind,
+  ) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
+
+    input.value = "";
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const currentSize = selectedAttachments.reduce(
+      (total, attachment) => total + attachment.file.size,
+      0,
+    );
+
+    const incomingSize = files.reduce(
+      (total, file) => total + file.size,
+      0,
+    );
+
+    if (currentSize + incomingSize > MAX_ATTACHMENT_SIZE) {
+      toast.error(
+        "Attachments cannot exceed 100 MB in total.",
+      );
+      return;
+    }
+
+    const newAttachments: PendingAttachment[] = files.map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      attachmentPreviewUrlsRef.current.add(previewUrl);
+
+      return {
+        id: crypto.randomUUID(),
+        file,
+        kind,
+        previewUrl,
+      };
+    });
+
+    setSelectedAttachments((current) => [
+      ...current,
+      ...newAttachments,
+    ]);
+
+    setActiveAttachmentId((current) => current ?? newAttachments[0]?.id ?? null);
+
+    toast.success(`${files.length} ${files.length === 1 ? "file" : "files"} selected.`);
+  };
+
+  const handleRemoveAttachment = (attachmentId: string) => {
+    const attachment = selectedAttachments.find(
+      (item) => item.id === attachmentId,
+    );
+
+    if (!attachment) {
+      return;
+    }
+
+    URL.revokeObjectURL(attachment.previewUrl);
+    attachmentPreviewUrlsRef.current.delete(attachment.previewUrl);
+
+    const remainingAttachments = selectedAttachments.filter(
+      (item) => item.id !== attachmentId,
+    );
+
+    setSelectedAttachments(remainingAttachments);
+
+    if (activeAttachmentId === attachmentId) {
+      setActiveAttachmentId(
+        remainingAttachments[0]?.id ?? null,
+      );
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!userId || isClearingChat) {
+      return;
+    }
+
+    setIsClearingChat(true);
+
+    try {
+      const response = await fetch("/api/chats/clear", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to clear chat.");
+      }
+
+      clearConversationMessages(userId);
+
+      setNextCursor(null);
+      setHasMoreMessages(true);
+      setNewMessageCount(0);
+      setShowScrollToBottom(false);
+
+      previousScrollHeightRef.current = null;
+      lastMessageIdRef.current = null;
+      isNearBottomRef.current = true;
+
+      setShowClearChatConfirmation(false);
+      setShowChatOptions(false);
+
+      window.dispatchEvent(new Event("webchat:chat-cleared"));
+
+      toast.success("Chat cleared.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to clear chat.",
+      );
+    } finally {
+      setIsClearingChat(false);
+    }
   };
 
   useEffect(() => {
@@ -399,55 +634,48 @@ export const ChatWindow = ({
     });
   }, [isOtherUserTyping]);
 
-  const handleClearChat = async () => {
-    if (!userId || isClearingChat) {
+  useEffect(() => {
+    if (!showAttachmentMenu) {
       return;
     }
 
-    setIsClearingChat(true);
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        attachmentMenuRef.current &&
+        !attachmentMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowAttachmentMenu(false);
+      }
+    };
 
-    try {
-      const response = await fetch("/api/chats/clear", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId }),
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowAttachmentMenu(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAttachmentMenu]);
+
+  useEffect(() => {
+    return () => {
+      attachmentPreviewUrlsRef.current.forEach((url) => {
+        URL.revokeObjectURL(url);
       });
 
-      const data = await response.json();
+      attachmentPreviewUrlsRef.current.clear();
+    };
+  }, []);
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to clear chat.");
-      }
-
-      clearConversationMessages(userId);
-
-      setNextCursor(null);
-      setHasMoreMessages(true);
-      setNewMessageCount(0);
-      setShowScrollToBottom(false);
-
-      previousScrollHeightRef.current = null;
-      lastMessageIdRef.current = null;
-      isNearBottomRef.current = true;
-
-      setShowClearChatConfirmation(false);
-      setShowChatOptions(false);
-
-      window.dispatchEvent(new Event("webchat:chat-cleared"));
-
-      toast.success("Chat cleared.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to clear chat.",
-      );
-    } finally {
-      setIsClearingChat(false);
-    }
-  };
+  const activeAttachment = selectedAttachments.find(
+    (attachment) => attachment.id === activeAttachmentId) ??
+      selectedAttachments[0] ?? null;
 
   return (
     <>
@@ -704,6 +932,135 @@ export const ChatWindow = ({
                   </>
                 )}
               </div>
+              
+              {activeAttachment && (
+                <div className="absolute inset-0 z-30 flex min-h-0 flex-col bg-[#080f1c]">
+                  <div className="flex h-12 shrink-0 items-center justify-end gap-2 px-4">
+                    <button
+                      type="button"
+                      onClick={() => documentInputRef.current?.click()}
+                      aria-label="Add more attachments"
+                      title="Add attachments"
+                      className="flex items-center justify-center shrink-0 rounded-full text-gray-300 p-2 cursor-pointer transition hover:bg-white/10 hover:text-white"
+                    >
+                      <Plus size={22} />
+                    </button>
+
+                    <a
+                      href={activeAttachment.previewUrl}
+                      download={activeAttachment.file.name}
+                      aria-label={`Download ${activeAttachment.file.name}`}
+                      title="Download"
+                      className="flex items-center justify-center shrink-0 rounded-full text-gray-300 p-2 cursor-pointer transition hover:bg-white/10 hover:text-white"
+                    >
+                      <Download size={22} />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleRemoveAttachment(activeAttachment.id)
+                      }
+                      aria-label="Remove selected attachment"
+                      title="Remove attachment"
+                      className="flex items-center justify-center shrink-0 rounded-full text-gray-300 p-2 cursor-pointer transition hover:bg-white/10 hover:text-red-400"
+                    >
+                      <X size={22} />
+                    </button>
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#080f1c] p-2 sm:px-4">
+                    {activeAttachment.file.type.startsWith("image/") ? (
+                      <img
+                        key={activeAttachment.id}
+                        src={activeAttachment.previewUrl}
+                        alt={activeAttachment.file.name}
+                        className="max-h-full max-w-full select-none object-contain"
+                      />
+                    ) : activeAttachment.file.type.startsWith("video/") ? (
+                      <video
+                        key={activeAttachment.id}
+                        src={activeAttachment.previewUrl}
+                        controls
+                        playsInline
+                        className="max-h-full max-w-full"
+                      />
+                    ) : activeAttachment.file.type.startsWith("audio/") ? (
+                      <div className="flex w-full max-w-lg flex-col items-center gap-4">
+                        <Music size={64} className="text-orange-400" />
+
+                        <p className="max-w-full break-all text-center text-sm text-white">
+                          {activeAttachment.file.name}
+                        </p>
+
+                        <audio
+                          key={activeAttachment.id}
+                          src={activeAttachment.previewUrl}
+                          controls
+                          className="w-full"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+                        <FileText size={64} className="text-blue-400" />
+
+                        <p className="break-all text-sm font-medium text-white">
+                          {activeAttachment.file.name}
+                        </p>
+
+                        <p className="text-xs text-gray-400">
+                          {formatFileSize(activeAttachment.file.size)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 items-center justify-center px-4 sm:px-6 py-3">
+                    <div className="flex min-w-0 items-center gap-2 overflow-x-auto
+                      [&::-webkit-scrollbar]:h-1.5
+                      [&::-webkit-scrollbar-thumb]:rounded-full
+                      [&::-webkit-scrollbar-thumb]:bg-gray-600"
+                    >
+                      {selectedAttachments.map((attachment) => {
+                        const isActive = attachment.id === activeAttachment.id;
+
+                        return (
+                          <button
+                            key={attachment.id}
+                            type="button"
+                            onClick={() =>
+                              setActiveAttachmentId(attachment.id)
+                            }
+                            aria-label={`Preview ${attachment.file.name}`}
+                            aria-pressed={isActive}
+                            title={attachment.file.name}
+                            className={`relative flex w-full h-12 w-18 cursor-pointer shrink-0 items-center justify-center overflow-hidden rounded-md border-2 transition sm:h-16 sm:w-24 ${
+                              isActive
+                                ? "border-cyan-400"
+                                : "border-gray-700 hover:border-gray-500"
+                            }`}
+                          >
+                            {attachment.file.type.startsWith("image/") ? (
+                              <img
+                                src={attachment.previewUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : attachment.file.type.startsWith("video/") ? (
+                              <Video size={24} className="text-pink-400" />
+                            ) : attachment.file.type.startsWith("audio/") ? (
+                              <Music size={24} className="text-orange-400" />
+                            ) : (
+                              <FileText size={24} className="text-blue-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {showScrollToBottom && (
                 <button
                   type="button"
@@ -738,11 +1095,92 @@ export const ChatWindow = ({
               )}
             </div>
             <div className="shrink-0 flex gap-3 p-4 bg-[#0a1220] border-t-2 border-gray-800">
-              <button className="rounded-full flex items-center justify-center px-2 shadow-lg text-gray-400 cursor-pointer 
-                bg-[#0d1927] hover:bg-gray-800 border border-gray-800 hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]"
-              >
-                <Plus />
-              </button>
+              <div className="relative shrink-0" ref={attachmentMenuRef}>
+                <input
+                  ref={documentInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(event) =>
+                    handleFilesSelected(event, "document")
+                  }
+                />
+
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => handleFilesSelected(event, "photo")}
+                />
+
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => handleFilesSelected(event, "video")}
+                />
+
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => handleFilesSelected(event, "audio")}
+                />
+                
+                <div
+                  id="attachment-menu"
+                  role="menu"
+                  aria-label="Attach files"
+                  aria-hidden={!showAttachmentMenu}
+                  className={`absolute bottom-full -left-1/2 z-50 mb-2 w-40 origin-bottom rounded-2xl border border-gray-700
+                    bg-[#162235] p-1 shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-200 ease-out
+                    ${showAttachmentMenu
+                      ? "visible translate-y-0 scale-100 opacity-100"
+                      : "invisible pointer-events-none translate-y-3 scale-95 opacity-0"
+                    }`}
+                >
+                  {ATTACHMENT_OPTIONS.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => handleAttachmentOptionClick(option.label)}
+                        className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left text-sm text-gray-200
+                          transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
+                      >
+                        <Icon size={20} className={option.iconClass} />
+                        <span className="font-medium">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowAttachmentMenu((value) => !value)
+                  }
+                  aria-label={showAttachmentMenu
+                    ? "Close attachments menu"
+                    : "Open attachments menu"
+                  }
+                  aria-expanded={showAttachmentMenu}
+                  aria-controls="attachment-menu"
+                  className="flex cursor-pointer items-center justify-cente rounded-full border border-gray-800 bg-[#0d1927]
+                    px-2 py-2 text-gray-400 shadow-lg transition-all duration-200 hover:bg-gray-800 hover:text-white"
+                >
+                  <Plus className={`transition-transform duration-200 ${showAttachmentMenu ? "rotate-45 text-cyan-300" : ""}`} />
+                </button>
+              </div>
+
               <input 
                 type="text"
                 value={messageInput}
@@ -766,7 +1204,7 @@ export const ChatWindow = ({
                 className="flex items-center justify-center shrink-0 px-2.5 py-1.5
                   rounded-full cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 
                   bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] hover:shadow-[0_0_10px_2px_rgba(255,255,255,0.4)]
-                   disabled:opacity-80 disabled:cursor-not-allowed"
+                  disabled:opacity-80 disabled:cursor-not-allowed"
               >
                 <img src="./send-icon.svg" alt="send icon" className="h-6 w-6 invert"/>
               </button>
