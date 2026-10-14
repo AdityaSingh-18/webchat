@@ -17,7 +17,7 @@
   <img alt="Socket.IO" src="https://img.shields.io/badge/Socket.IO-010101?logo=socketdotio&logoColor=white" />
 </p>
 
-> 🚧 **Work in progress.** Authentication, connections, profiles, and the core 1:1 messaging workflow are implemented. Read receipts, typing indicators, online presence, chat filters, and other messaging features are still in progress. See the [roadmap](#roadmap) for details.
+> 🚧 **Work in progress.** Authentication, connections, profiles, real-time 1:1 messaging, and media attachments are implemented. This includes message history, delivery/read receipts, typing indicators, online presence, chat filters, clear chat, inline media previews, file downloads, and the Media, Docs & Links gallery. Starred messages and additional message actions are currently in progress. See the [roadmap](#roadmap) for details.
 
 ## Table of contents
 
@@ -36,7 +36,7 @@
 
 WebChat is a connection-based messaging app. Users discover people by username or phone number, send a connection request, and can communicate after the request is accepted. The interface uses a dark theme with gradient accents, a sidebar, a chat list, a chat window, and a user-information panel.
 
-**Working today**
+**Implemented features**
 
 - Email-verified sign-up with OTP, login, logout, session restoration, and protected routes
 - Find users and send, accept, reject, or cancel connection requests
@@ -45,11 +45,16 @@ WebChat is a connection-based messaging app. Users discover people by username o
 - 1:1 text messaging with persisted messages
 - Paginated message history, including loading older messages when scrolling
 - Supabase Realtime subscriptions for message and chat-list updates
-- Chat list containing accepted connections, latest-message previews, and timestamps
+- Chat list containing accepted connections, latest-message previews, unread counts, and timestamps
 - Date separators generated from message timestamps
-- User details panel and message input interface
-
-Unread counts are returned by the chat-list query, but the unread badge still needs end-to-end verification. Message delivery/read receipts, typing indicators, and online presence are not complete yet.
+- Sent, delivered, and read receipts
+- Typing indicators and online/offline presence
+- Unread and Online chat filters
+- Clear chat functionality
+- File attachments with pre-send previews and secure storage
+- Inline image previews and file downloads
+- Media, Docs & Links gallery in the User Info panel, with live counts
+- Link detection in messages
 
 ## Roadmap
 
@@ -66,8 +71,8 @@ This README doubles as the project's progress tracker. Update the relevant check
 | 3 | Profile | ✅ Done |
 | 4 | Chat UI shell | ✅ Done |
 | 5 | Real-time 1:1 messaging | ✅ Done |
-| 6 | Media & attachments | 🚧 In progress |
-| 7 | Starred & message actions | ⏳ Planned |
+| 6 | Media & attachments | ✅ Done |
+| 7 | Starred & message actions | 🚧 In progress |
 | 8 | Groups | ⏳ Planned |
 | 9 | Account, privacy & settings | ⏳ Planned |
 | 10 | Quality, security & deployment | ⏳ Planned |
@@ -120,7 +125,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Real-time message updates through the messaging/Realtime integration
 - [x] Message history with pagination and load-older-on-scroll behavior
 - [x] Chat list for accepted connections with latest-message preview and timestamp
-- [x] Verify unread counts and unread badge updates end to end
+- [x] Unread counts and unread badge updates
 - [x] Day separators based on real message dates
 - [x] Sent / delivered / read receipts
 - [x] Smart chat auto-scrolling, preserved reading position, and new message scroll button
@@ -129,7 +134,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Working **Unread** and **Online** filters
 - [x] Clear chat
 
-### Phase 6 — Media & attachments 🚧
+### Phase 6 — Media & attachments ✅
 
 - [x] Attach button for images, documents, and other files
 - [x] Pre-send previews for selected documents, images, videos, and other files
@@ -138,10 +143,10 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Upload and send selected documents and files
 - [x] Persist and retrieve attachment metadata with message history and realtime updates
 - [x] Inline image previews and file downloads
-- [ ] **Media, Docs and Links** gallery in the User Info panel, with live counts
-- [ ] Link detection in messages
+- [x] **Media, Docs and Links** gallery in the User Info panel, with live counts
+- [x] Link detection in messages
 
-### Phase 7 — Starred & message actions ⏳
+### Phase 7 — Starred & message actions 🚧
 
 - [ ] Star and unstar messages
 - [ ] **Starred** tab and starred count in the User Info panel
@@ -214,27 +219,60 @@ The frontend and the real-time server are maintained separately:
 webchat/
 ├── frontend/
 │   ├── app/
-│   │   ├── api/                 # Next.js Route Handlers
-│   │   ├── components/          # Chat, profile, and shared UI
+│   │   ├── api/
+│   │   │   ├── auth/
+│   │   │   │   ├── clear-cookie/
+│   │   │   │   ├── login/
+│   │   │   │   ├── logout/
+│   │   │   │   └── register/
+│   │   │   ├── chats/
+│   │   │   │   └── clear/
+│   │   │   ├── connections/
+│   │   │   │   ├── requests/
+│   │   │   │   └── [id]/
+│   │   │   ├── messages/
+│   │   │   │   └── gallery/
+│   │   │   └── users/
+│   │   │       ├── connected-search/
+│   │   │       ├── search/
+│   │   │       └── [id]/
+│   │   ├── login/
+│   │   ├── signup/
+│   │   ├── verify-email/
 │   │   └── ...
+│   ├── components/
+│   │   ├── auth/
+│   │   │   └── AuthProvider.tsx
+│   │   ├── ChatList.tsx
+│   │   ├── ChatWindow.tsx
+│   │   ├── DeleteAvatarModal.tsx
+│   │   ├── OptInput.tsx
+│   │   ├── Profile.tsx
+│   │   ├── RequestList.tsx
+│   │   ├── Settings.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── UserDetails.tsx
 │   ├── lib/
-│   │   ├── store/               # Zustand stores
-│   │   └── supabase/            # Supabase browser/server clients
+│   │   ├── auth/
+│   │   │   └── verificationToken.ts
+│   │   ├── socket/
+│   │   │   └── socket.ts
+│   │   ├── store/
+│   │   │   └── chatStore.ts
+│   │   ├── supabase/
+│   │   │   ├── server.ts
+│   │   │   └── supabaseClient.ts
+│   │   └── index.ts
 │   └── ...
 ├── server/
-│   ├── .env.example             # Real-time server environment template
-│   ├── package.json              # Server scripts and dependencies
-│   └── src/
-│       ├── server.ts             # Fastify and Socket.IO entry point
-│       ├── config/env.ts         # Environment loading and validation
-│       ├── lib/
-│       │   ├── supabase.ts       # Authenticated Supabase client
-│       │   └── socket/           # Socket rate limiting and room helpers
-│       ├── schemas/              # Message input validation schemas
-│       ├── services/             # Message persistence/service logic
-│       └── sockets/              # Socket.IO event handlers
+│   ├── config/
+│   ├── lib/
+│   │   └── socket/
+│   ├── schemas/
+│   ├── services/
+│   └── sockets/
 ├── supabase/
-│   └── migrations/              # Database schema, policies, and migrations
+│   └── migrations/
 └── README.md
 ```
 
@@ -243,26 +281,45 @@ This is a high-level view; individual folders may contain additional files.
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     B["Browser<br/>Next.js + React + Zustand"]
     P["proxy.ts<br/>Session and route protection"]
-    A["Next.js API routes<br/>Auth, users, connections, chats, history"]
-    W["Fastify + Socket.IO<br/>server/"]
+    A["Next.js API Route Handlers<br/>Auth, users, connections, chats, messages"]
+    W["Fastify + Socket.IO<br/>Separate server/"]
+    C["ChatWindow<br/>Messages and attachments"]
+    G["Media, Docs & Links Gallery"]
     S[("Supabase<br/>Auth, Postgres, Storage, Realtime")]
+    M[("messages")]
+    D[("message_attachments")]
+    F[("Private chat-media bucket")]
 
     B --> P
-    P --> A
+    B --> A
     A --> S
-    B <-->|"Real-time messaging"| W
-    W -->|"Message persistence / lookups"| S
-    B <-->|"Auth state, storage, database subscriptions"| S
+
+    B <--> |"Real-time messaging, typing, presence"| W
+    W <--> |"Authentication, persistence, lookups"| S
+
+    C --> |"Load paginated history"| A
+    A --> M
+    A --> D
+
+    C --> |"Attachment upload preparation and sending"| W
+    W --> |"Prepare authorized upload"| F
+    F --> |"Secure file access"| C
+
+    M --> G
+    D --> G
+    C --> G
+    S <--> |"Auth state and database subscriptions"| B
 ```
 
-- **Next.js API routes** handle authenticated HTTP operations such as user lookups, connection management, chat-list retrieval, and paginated message history.
-- **Fastify + Socket.IO** runs in the separate `server/` directory and provides the real-time messaging transport.
-- **Supabase** provides authentication, Postgres persistence, profile/avatar storage, Row Level Security, and database change subscriptions.
+- **Next.js API routes** handle authenticated HTTP operations such as user lookups, connection management, chat-list retrieval, chat clearing, and paginated message history.
+- **Fastify + Socket.IO** runs in the separate `server/` directory and provides the real-time messaging transport, including attachment-related messaging events.
+- **Supabase** provides authentication, Postgres persistence, profile/avatar storage, private chat-media storage, Row Level Security, and database change subscriptions.
 - **`proxy.ts`** checks the authentication session and applies route redirects.
 - **Zustand** manages client-side chat state, the current user, active navigation, and messaging state.
+- **Media, Docs & Links gallery** groups retrieved attachment metadata and detected message links in the User Info panel.
 
 ## API routes
 
@@ -281,9 +338,21 @@ The following routes are implemented in the Next.js frontend. All routes marked 
 | `/api/connections/requests` | POST | Yes | Send a connection request |
 | `/api/connections/[id]` | PATCH | Yes | Accept, reject, or cancel a connection request |
 | `/api/chats` | GET | Yes | Load accepted connections, latest-message previews, timestamps, and unread counts |
-| `/api/messages?userId=&limit=&before=` | GET | Yes | Load paginated 1:1 message history; `before` is used to load older messages |
+| `/api/chats/clear` | POST | Yes | Clear the authenticated user's chat history for the selected conversation |
+| `/api/messages?userId=&limit=&before=` | GET | Yes | Load paginated 1:1 message history, including attachment metadata; `before` is used to load older messages |
+| `/api/messages/gallery?userId=` | GET | Yes | Retrieve shared media, documents, links, and gallery counts for a conversation
 
-The real-time server's event handlers are implemented separately under `server/src`. Keep its event names and payloads documented alongside the server code when that contract stabilizes; do not treat Socket.IO events as Next.js API routes.
+### Attachment and gallery data flow
+
+The Media, Docs & Links gallery uses the existing message and attachment data flow; it does not require a separate gallery API endpoint.
+
+- **Messages API:** Returns paginated message history and associated attachment metadata.
+- **Socket.IO messaging handlers:** Handle real-time messaging and attachment-related upload preparation and sending.
+- **`message_attachments`:** Stores file details associated with messages, including storage path, filename, MIME type, and file size.
+- **Private `chat-media` bucket:** Stores the actual files. Secure access is used for previews and downloads.
+- **Gallery:** The frontend groups attachments into Media and Docs and detects URLs in messages for the Links section.
+
+The real-time server's event handlers are implemented separately under `server/src`. Keep event names and payloads documented alongside the server code; Socket.IO events are not Next.js API routes.
 
 ## Real-time communication
 
@@ -293,7 +362,10 @@ WebChat uses both Socket.IO and Supabase Realtime for live behavior. Socket.IO p
 - Older history is requested with a cursor when the user scrolls to the top of the chat window.
 - The chat list is loaded through `/api/chats` and includes accepted connections even when there is no message preview yet.
 - Message changes trigger chat-list refreshes so previews and timestamps can stay current.
-- Unread counts are calculated by the chat-list query; unread badge behavior still requires end-to-end verification.
+- Unread counts are included in the chat-list data.
+- Attachment metadata is persisted and retrieved alongside message history.
+- Attachment uploads use the private `chat-media` Storage bucket.
+- The Media, Docs & Links gallery derives its contents from attachment metadata and detected URLs.
 
 ## Data model
 
@@ -303,8 +375,10 @@ The application uses these primary tables and storage resources:
 - **`connections`**: `id`, `user_id` (requester), `contact_id` (recipient), `status` (`pending` or `accepted`), `custom_name`, and `created_at`.
 - **`conversations`**: `id`, `user_one_id`, `user_two_id`, `created_at`, and `updated_at`. A conversation represents a 1:1 pair of users.
 - **`messages`**: `id`, `conversation_id`, `sender_id`, `receiver_id`, `content`, `is_read`, and `created_at`. Stores persisted messages and the current read state.
-- **Supabase Storage**: the `avatars` bucket stores profile photos. Chat-media storage is planned.
-- **Supabase Realtime**: subscriptions support live connection-request and messaging/chat-list updates.
+- **`message_attachments`**: `message_id`, `conversation_id`, `uploaded_by`, `storage_path`, `file_name`, `mime_type`, `size_bytes`, and `created_at`. Stores attachment metadata associated with messages; the file contents are stored separately.
+- **Supabase Storage — `avatars`**: Stores profile photos.
+- **Supabase Storage — `chat-media`**: Private bucket for chat attachments, with access controlled by Storage policies.
+- **Supabase Realtime**: Subscriptions support live connection-request and messaging/chat-list updates.
 
 Row Level Security and database grants should restrict rows to the relevant users. Apply and test migrations against a development project before deploying database changes.
 
@@ -395,9 +469,10 @@ If `pnpm dev` is not defined in the current `server/package.json`, run `pnpm run
    ```
 
 3. Verify that the required tables, profile-creation trigger, Row Level Security policies, and grants are present.
-4. Create the public `avatars` Storage bucket and configure its access policies to match the application's upload and removal behavior.
-5. In Supabase Authentication settings, keep email confirmation enabled and configure the signup email template for the verification code used by the app.
-6. Confirm that the `messages` and `connections` tables are included in the Realtime publication when required by the subscriptions.
+4. Create the `avatars` Storage bucket and configure its access policies to match the application's upload and removal behavior.
+5. Verify that the private `chat-media` bucket and its Storage access policies are configured by the repository migrations.
+6. In Supabase Authentication settings, keep email confirmation enabled and configure the signup email template for the verification code used by the app.
+7. Confirm that the `messages` and `connections` tables are included in the Realtime publication when required by the subscriptions.
 
 Review the SQL plan and target project before applying migrations. Do not run development migrations against production without a backup and review.
 

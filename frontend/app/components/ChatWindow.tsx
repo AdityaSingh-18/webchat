@@ -5,6 +5,7 @@ import {
   useState,
   useRef,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 
 import {
@@ -126,6 +127,80 @@ const formatFileSize = (bytes: number) => {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+
+const URL_PATTERN =
+  /https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|(?<![\w@])(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?::\d{1,5})?(?:\/[^\s<>"']*)?/gi;
+
+const renderMessageContent = (content: string): ReactNode[] => {
+  const elements: ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  URL_PATTERN.lastIndex = 0;
+
+  while ((match = URL_PATTERN.exec(content)) !== null) {
+    const matchedUrl = match[0];
+
+    const trailingPunctuation = matchedUrl.match(/[.,!?;:)\]}]+$/)?.[0] ?? "";
+
+    const urlText = trailingPunctuation
+      ? matchedUrl.slice(0, -trailingPunctuation.length)
+      : matchedUrl;
+
+    if (!urlText) {
+      continue;
+    }
+
+    if (match.index > cursor) {
+      elements.push(content.slice(cursor, match.index));
+    }
+
+    const href = /^https?:\/\//i.test(urlText)
+      ? urlText
+      : `https://${urlText}`;
+
+    let isSafeUrl = false;
+
+    try {
+      const parsedUrl = new URL(href);
+
+      isSafeUrl =
+        parsedUrl.protocol === "http:" ||
+        parsedUrl.protocol === "https:";
+    } catch {
+      isSafeUrl = false;
+    }
+
+    if (isSafeUrl) {
+      elements.push(
+        <a
+          key={`link-${match.index}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="break-all text-cyan-300 underline decoration-cyan-300/40 underline-offset-2 transition-colors hover:text-cyan-200 hover:decoration-cyan-200"
+        >
+          {urlText}
+        </a>,
+      );
+    } else {
+      elements.push(urlText);
+    }
+
+    if (trailingPunctuation) {
+      elements.push(trailingPunctuation);
+    }
+
+    cursor = match.index + matchedUrl.length;
+  }
+
+  if (cursor < content.length) {
+    elements.push(content.slice(cursor));
+  }
+
+  return elements;
 };
 
 export const ChatWindow = ({
@@ -1020,7 +1095,7 @@ export const ChatWindow = ({
                               >
                                 {data.content && (
                                   <p className="whitespace-pre-wrap break-words">
-                                    {data.content}
+                                    {renderMessageContent(data.content)}
                                   </p>
                                 )}
 

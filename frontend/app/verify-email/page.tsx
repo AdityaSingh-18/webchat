@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { Loader2 } from "lucide-react";
 
-import OtpInput from "@/components/OptInput";
+import OtpInput from "@/components/OtpInput";
 import { supabase } from "@/lib/supabase/supabaseClient";
 
 export default function page () {
