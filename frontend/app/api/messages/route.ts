@@ -106,9 +106,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("messages")
-      .select(
-        "id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at",
-      )
+      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
@@ -122,7 +120,6 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
-
     if (error) {
       console.error("Load messages error:", error);
 
@@ -137,6 +134,33 @@ export async function GET(request: Request) {
 
     const hasMore = data.length > limit;
     const page = data.slice(0, limit).reverse();
+    const messageIds = page.map((message) => message.id);
+    const starredMessageIds = new Set<string>();
+
+    if (messageIds.length > 0) {
+      const { data: starredRows, error: starredError } = await supabase
+        .from("starred_messages")
+        .select("message_id")
+        .eq("user_id", user.id)
+        .in("message_id", messageIds);
+
+      if (starredError) {
+        console.error("Load starred messages error:", starredError);
+
+        return Response.json(
+          {
+            success: false,
+            error: "Failed to load message star states.",
+          },
+          { status: 500 },
+        );
+      }
+
+      for (const row of starredRows ?? []) {
+        starredMessageIds.add(row.message_id);
+      }
+    }
+
     const nextCursor = page.length > 0 ? page[0].created_at : null;
 
     const attachmentsByMessageId = new Map<
@@ -158,9 +182,7 @@ export async function GET(request: Request) {
       const messageIds = page.map((message) => message.id);
       const { data: attachmentRows, error: attachmentsError } = await supabase
         .from("message_attachments")
-        .select(
-          "id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at",
-        )
+        .select("id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at")
         .eq("conversation_id", conversation.id)
         .in("message_id", messageIds)
         .order("created_at", { ascending: true });
@@ -186,6 +208,7 @@ export async function GET(request: Request) {
 
     const messages = page.map((message) => ({
       ...message,
+      is_starred: starredMessageIds.has(message.id),
       attachments: attachmentsByMessageId.get(message.id) ?? [],
     }));
 

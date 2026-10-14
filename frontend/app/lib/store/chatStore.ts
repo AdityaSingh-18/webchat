@@ -60,6 +60,7 @@ export interface MessageRecord {
   delivered_at: string | null;
   read_at: string | null;
   attachments?: MessageAttachmentRecord[];
+  is_starred?: boolean;
 }
 
 const deliveryRequestsInFlight = new Set<string>();

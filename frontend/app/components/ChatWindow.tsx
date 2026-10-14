@@ -36,6 +36,7 @@ import {
   Music,
   Contact,
   Download,
+  Star,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -208,6 +209,9 @@ export const ChatWindow = ({
 }: ChatWindowProps) => {
   const [messageInput, setMessageInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+
+  const [starOverrides, setStarOverrides] = useState<Record<string, boolean>>({});
+  const [starLoadingIds, setStarLoadingIds] = useState<Record<string, boolean>>({});
   
   const [user, setUser] = useState<UserDetailsData | null>(null);
   const [userLoading, setUserLoading] = useState(false);
@@ -621,6 +625,53 @@ export const ChatWindow = ({
       );
     } finally {
       setDownloadingAttachmentId(null);
+    }
+  };
+
+  const handleToggleStar = async (message: MessageRecord) => {
+    const wasStarred = starOverrides[message.id] ?? message.is_starred ?? false;
+    const nextStarred = !wasStarred;
+
+    setStarOverrides((current) => ({
+      ...current,
+      [message.id]: nextStarred,
+    }));
+
+    setStarLoadingIds((current) => ({
+      ...current,
+      [message.id]: true,
+    }));
+
+    try {
+      const response = await fetch("/api/messages/star", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messageId: message.id,
+          starred: nextStarred,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to update starred message.");
+      }
+
+      toast.success(nextStarred ? "Message starred." : "Message unstarred.");
+    } catch (error) {
+      setStarOverrides((current) => ({
+        ...current,
+        [message.id]: wasStarred,
+      }));
+
+      toast.error(error instanceof Error ? error.message : "Failed to update starred message.");
+    } finally {
+      setStarLoadingIds((current) => ({
+        ...current,
+        [message.id]: false,
+      }));
     }
   };
 
@@ -1063,6 +1114,8 @@ export const ChatWindow = ({
                     <div className="flex flex-col gap-2 px-12 py-4">
                       {messages.map((data, index) => {
                         const me = data.sender_id === currentUser?.id;
+                        const isStarred = starOverrides[data.id] ?? data.is_starred ?? false;
+                        const isStarLoading = Boolean(starLoadingIds[data.id]);
                         const currentDateKey = getDateKey(new Date(data.created_at));
 
                         const previousDateKey = index > 0
@@ -1203,6 +1256,22 @@ export const ChatWindow = ({
                                   minute: "2-digit",
                                 })}
                               </span>
+
+                              <button
+                                type="button"
+                                onClick={() => void handleToggleStar(data)}
+                                disabled={isStarLoading}
+                                aria-label={isStarred ? "Unstar message" : "Star message"}
+                                aria-pressed={isStarred}
+                                title={isStarred ? "Unstar message" : "Star message"}
+                                className={`cursor-pointer rounded p-0.5 transition-colors disabled:cursor-wait disabled:opacity-50 ${
+                                  isStarred
+                                    ? "text-yellow-300"
+                                    : "text-gray-500 hover:text-yellow-300"
+                                }`}
+                              >
+                                <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+                              </button>
 
                               {me && (
                                 <span title={data.read_at || data.is_read

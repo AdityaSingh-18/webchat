@@ -734,7 +734,7 @@ export const ChatList = ({
                               />
                             )}
                           </div>
-                          <div className="w-full flex flex-col justify-center">
+                          <div className="min-w-0 flex-1 flex flex-col justify-center">
                             <div className="flex flex-row items-center justify-between gap-2">
                               <p className={`truncate font-medium ${isActiveChat ? "text-white" : "text-gray-300"}`}>
                                 {chat.name}

@@ -148,7 +148,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 
 ### Phase 7 — Starred & message actions 🚧
 
-- [ ] Star and unstar messages
+- [x] Star and unstar messages
 - [ ] **Starred** tab and starred count in the User Info panel
 - [ ] Reply to a message
 - [ ] Edit and delete messages (for me / for everyone)
