@@ -63,6 +63,12 @@ export interface MessageRecord {
   is_starred?: boolean;
 }
 
+export interface StarredMessageJump {
+  requestId: number;
+  userId: string;
+  messageId: string;
+}
+
 const deliveryRequestsInFlight = new Set<string>();
 const readRequestsInFlight = new Set<string>();
 
@@ -126,6 +132,14 @@ interface ChatStore {
   updateMessage: (message: MessageRecord) => void;
   markMessagesRead: (userId: string) => Promise<void>;
 
+  pendingStarredMessageJump: StarredMessageJump | null;
+  starredJumpSequence: number; 
+  requestStarredMessageJump: (
+    userId: string,
+    messageId: string,
+  ) => void;
+  clearStarredMessageJump: (requestId: number) => void;
+
   typingUsers: Record<string, boolean>;
   setTypingStatus: (
     userId: string,
@@ -163,6 +177,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   typingUsers: {},
   typingToUsers: {},
   onlineUsers: {},
+  pendingStarredMessageJump: null,
+  starredJumpSequence: 0,
 
   setOnlineUsers: (userIds) => {
     set({
@@ -400,6 +416,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }),
     );
+  },
+
+  requestStarredMessageJump: (userId, messageId) => {
+    set((state) => {
+      const requestId = state.starredJumpSequence + 1;
+
+      return {
+        starredJumpSequence: requestId,
+        pendingStarredMessageJump: {
+          requestId,
+          userId,
+          messageId,
+        },
+      };
+    });
+  },
+
+  clearStarredMessageJump: (requestId) => {
+    set((state) => {
+      if (state.pendingStarredMessageJump?.requestId !== requestId) {
+        return state;
+      }
+
+      return {
+        pendingStarredMessageJump: null,
+      };
+    });
   },
 
   clearConversationMessages: (userId) => {

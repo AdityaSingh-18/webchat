@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/Sidebar";
 import { ChatList } from "@/components/ChatList";
 import { ChatWindow } from "@/components/ChatWindow";
+import { StarredMessages } from "@/components/StarredMessages";
 import { RequestList } from "@/components/RequestList";
 import { Settings } from "@/components/Settings";
 import { Profile } from "@/components/Profile";
@@ -19,14 +20,14 @@ export default function Home() {
       <Sidebar />
 
       {(activeTab === "chat" ||
-        activeTab === "group" ||
-        activeTab === "starred") && (
+        activeTab === "group") && (
         <ChatList
           activeChat={activeChat}
           onSelectChat={setActiveChat}
         />
       )}
 
+      {activeTab === "starred" && <StarredMessages onSelectChat={setActiveChat}/>}
       {activeTab === "requests" && <RequestList />}
       {activeTab === "settings" && <Settings />}
       {activeTab === "profile" && <Profile />}

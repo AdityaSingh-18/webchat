@@ -181,7 +181,7 @@ const renderMessageContent = (content: string): ReactNode[] => {
           href={href}
           target="_blank"
           rel="noopener noreferrer nofollow"
-          className="break-all text-cyan-300 underline decoration-cyan-300/40 underline-offset-2 transition-colors hover:text-cyan-200 hover:decoration-cyan-200"
+          className="break-all text-gray-200 underline decoration-gray-200 underline-offset-2 transition-colors hover:text-cyan-200 hover:decoration-cyan-200"
         >
           {urlText}
         </a>,
@@ -237,19 +237,25 @@ export const ChatWindow = ({
   const [messageAttachmentUrls, setMessageAttachmentUrls] = useState<Record<string, string>>({});
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
   
-  const currentUser = useChatStore((state) => state.currentUser);
+  const [historyReadyUserId, setHistoryReadyUserId] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
-  const startTyping = useChatStore((state) => state.startTyping);
-  const stopTyping = useChatStore((state) => state.stopTyping);
-  const isOtherUserTyping = useChatStore((state) => userId ? state.typingUsers[userId] ?? false : false);
+  const currentUser = useChatStore((state) => state.currentUser);
   
   const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const sendMessage = useChatStore((state) => state.sendMessage);
   const prepareAttachmentUpload = useChatStore((state) => state.prepareAttachmentUpload);
   const prependMessages = useChatStore((state) => state.prependMessages);
   const markMessagesRead = useChatStore((state) => state.markMessagesRead);
-  const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
 
+  const pendingStarredMessageJump = useChatStore((state) => state.pendingStarredMessageJump);
+  const clearStarredMessageJump = useChatStore((state) => state.clearStarredMessageJump);
+
+  const startTyping = useChatStore((state) => state.startTyping);
+  const stopTyping = useChatStore((state) => state.stopTyping);
+  const isOtherUserTyping = useChatStore((state) => userId ? state.typingUsers[userId] ?? false : false);
+  const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
+  
   const clearConversationMessages = useChatStore((state) => state.clearConversationMessages);
 
   const isTypingRef = useRef(false);
@@ -271,6 +277,10 @@ export const ChatWindow = ({
 
   const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set());
   const attachmentUrlRequestsRef = useRef(new Set<string>());
+
+  const nextCursorRef = useRef<string | null>(null);
+  const hasMoreMessagesRef = useRef(true);
+  const runningStarredJumpRef = useRef<number | null>(null);
 
   const BOTTOM_THRESHOLD = 120;
 
@@ -313,9 +323,15 @@ export const ChatWindow = ({
 
       setHasMoreMessages(data.hasMore);
       setNextCursor(data.nextCursor);
+      hasMoreMessagesRef.current = Boolean(data.hasMore);
+      nextCursorRef.current = data.nextCursor ?? null;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load messages.");
     } finally {
+      if (!before) {
+        setHistoryReadyUserId(userId);
+      }
+      
       setHistoryLoading(false);
       setLoadingOlder(false);
     }
@@ -659,6 +675,8 @@ export const ChatWindow = ({
         throw new Error(result.error ?? "Failed to update starred message.");
       }
 
+      window.dispatchEvent(new Event("webchat:starred-changed"));
+
       toast.success(nextStarred ? "Message starred." : "Message unstarred.");
     } catch (error) {
       setStarOverrides((current) => ({
@@ -845,19 +863,175 @@ export const ChatWindow = ({
   }, [userId]);
 
   useEffect(() => {
+    setHasMoreMessages(true);
+    setNextCursor(null);
+    setHistoryReadyUserId(null);
+    initialLoadRef.current = true;
+    nextCursorRef.current = null;
+    hasMoreMessagesRef.current = true;
+    
     if (!userId) {
-      setHasMoreMessages(true);
-      setNextCursor(null);
-      initialLoadRef.current = true;
       return;
     }
 
-    setHasMoreMessages(true);
-    setNextCursor(null);
-    initialLoadRef.current = true;
-
     void loadMessages();
   }, [userId]);
+
+  useEffect(() => {
+    const target = pendingStarredMessageJump;
+
+    if (
+      !target ||
+      target.userId !== userId ||
+      historyReadyUserId !== userId ||
+      historyLoading ||
+      loadingOlder
+    ) {
+      return;
+    }
+
+    if (runningStarredJumpRef.current === target.requestId) {
+      return;
+    }
+
+    runningStarredJumpRef.current = target.requestId;
+
+    let cancelled = false;
+
+    const jumpToMessage = async () => {
+      try {
+        let cursor = nextCursorRef.current;
+        let hasMore = hasMoreMessagesRef.current;
+        let pagesLoaded = 0;
+
+        const isTargetLoaded = () =>
+          (
+            useChatStore.getState().messages[target.userId] ?? []
+          ).some((message) => message.id === target.messageId);
+
+        while (
+          !isTargetLoaded() &&
+          hasMore &&
+          cursor &&
+          pagesLoaded < 100
+        ) {
+          const params = new URLSearchParams({
+            userId: target.userId,
+            limit: "30",
+            before: cursor,
+          });
+
+          const response = await fetch(`/api/messages?${params.toString()}`, {
+            cache: "no-store",
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(
+              data.error ?? "Failed to find the starred message.",
+            );
+          }
+
+          const batch = Array.isArray(data.messages) ? data.messages : [];
+
+          if (batch.length === 0) {
+            cursor = null;
+            hasMore = false;
+            break;
+          }
+
+          previousScrollHeightRef.current =
+            messagesContainerRef.current?.scrollHeight ?? null;
+
+          prependMessages(target.userId, batch);
+
+          cursor = data.nextCursor ?? null;
+          hasMore = Boolean(data.hasMore) && Boolean(cursor);
+          pagesLoaded += 1;
+
+          nextCursorRef.current = cursor;
+          hasMoreMessagesRef.current = hasMore;
+
+          setNextCursor(cursor);
+          setHasMoreMessages(hasMore);
+        }
+
+        if (cancelled) return;
+
+        if (!isTargetLoaded()) {
+          throw new Error(
+            "This starred message could not be found in the available history.",
+          );
+        }
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
+        });
+
+        if (cancelled) return;
+
+        const container = messagesContainerRef.current;
+
+        const targetElement = container
+          ? Array.from(
+              container.querySelectorAll<HTMLElement>("[data-message-id]"),
+            ).find(
+              (element) => element.dataset.messageId === target.messageId,
+            )
+          : null;
+
+        if (!targetElement) {
+          throw new Error("The starred message could not be displayed.");
+        }
+
+        targetElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+
+        setHighlightedMessageId(target.messageId);
+
+        window.setTimeout(() => {
+          setHighlightedMessageId((current) =>
+            current === target.messageId ? null : current,
+          );
+        }, 1500);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to open the starred message.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          clearStarredMessageJump(target.requestId);
+        }
+      }
+    };
+
+    void jumpToMessage();
+
+    return () => {
+      cancelled = true;
+
+      if (runningStarredJumpRef.current === target.requestId) {
+        runningStarredJumpRef.current = null;
+      }
+    };
+  }, [
+    pendingStarredMessageJump,
+    userId,
+    historyReadyUserId,
+    historyLoading,
+    loadingOlder,
+    prependMessages,
+    clearStarredMessageJump,
+  ]);
 
   useEffect(() => {
     if (!userId || historyLoading || messages.length === 0) {
@@ -1095,7 +1269,6 @@ export const ChatWindow = ({
                   [&::-webkit-scrollbar-thumb]:rounded-full
                   [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]"
               >
-                
                 {loadingOlder && (
                   <div className="flex justify-center py-3">
                     <span className="text-xs text-gray-400">
@@ -1138,8 +1311,15 @@ export const ChatWindow = ({
                                 </div>
                               );
                             })()}
-                            <div className={`flex ${me ? "justify-end" : "justify-start"}`}>
+                            <div
+                              data-message-id={data.id}
+                              className={`flex ${me ? "justify-end" : "justify-start"} ${highlightedMessageId === data.id
+                                ? "rounded-md bg-cyan-400/5"
+                                : ""}
+                              `} 
+                            >
                               <div
+                                data-message-id={data.id}
                                 className={`w-fit min-w-50 px-4 py-3 text-white ${
                                   me
                                     ? "rounded-tl-xl rounded-bl-xl bg-gradient-to-r from-cyan-500/80 to-transparent"

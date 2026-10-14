@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getInitials } from "@/lib";
 import { supabase } from "@/lib/supabase/supabaseClient";
 import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
+import { StarredMessages } from "@/components/StarredMessages";
+
 import {
   ArrowLeft,
   Ban,
@@ -120,6 +122,10 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
   const [galleryError, setGalleryError] = useState("");
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
+  
+  const [showStarred, setShowStarred] = useState(false);
+  const [starredCount, setStarredCount] = useState<number | null>(null);
+
   const lastMessageIdRef = useRef<string | null | undefined>(undefined);
 
   const latestMessageId = useChatStore((state) => {
@@ -160,6 +166,43 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
       setGalleryLoading(false);
     }
   }, [user.id]);
+
+  const loadStarredCount = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `/api/messages/starred?userId=${encodeURIComponent(user.id)}`,
+        { cache: "no-store" },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to load starred count.");
+      }
+
+      setStarredCount(Number(data.count ?? 0));
+    } catch (error) {
+      console.error("Failed to load starred message count:", error);
+      setStarredCount(null);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    void loadStarredCount();
+
+    const handleStarredChange = () => {
+      void loadStarredCount();
+    };
+
+    window.addEventListener("webchat:starred-changed", handleStarredChange);
+
+    return () => {
+      window.removeEventListener(
+        "webchat:starred-changed",
+        handleStarredChange,
+      );
+    };
+  }, [loadStarredCount]);
 
   useEffect(() => {
     void loadGallery();
@@ -243,8 +286,7 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
     }
   };
 
-  const totalSharedItems =
-    galleryData.counts.media + galleryData.counts.docs + galleryData.counts.links;
+  const totalSharedItems = galleryData.counts.media + galleryData.counts.docs + galleryData.counts.links;
 
   const renderGalleryContent = () => {
     if (galleryLoading) {
@@ -424,19 +466,28 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
   return (
     <div className="flex h-screen w-80 shrink-0 flex-col border-l-2 border-gray-800 bg-slate-900 text-white">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-800 p-4">
-        {showGallery ? (
+        {showGallery || showStarred ? (
           <>
             <button
               type="button"
-              onClick={() => setShowGallery(false)}
+              onClick={() => {
+                setShowGallery(false);
+                setShowStarred(false);
+              }}
               aria-label="Back to user info"
               className="rounded-full p-1 text-gray-300 transition hover:bg-white/5 hover:text-cyan-300"
             >
               <ArrowLeft size={21} />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-medium">Media, Docs and Links</p>
-              <p className="text-xs text-gray-500">{totalSharedItems} shared items</p>
+              <p className="truncate text-base font-medium">
+                {showGallery ? "Media, Docs and Links" : "Starred Messages"}
+              </p>
+              <p className="text-xs text-gray-500">
+                {showGallery
+                  ? `${totalSharedItems} shared items`
+                  : `${starredCount ?? 0} starred messages`}
+              </p>
             </div>
           </>
         ) : (
@@ -478,6 +529,17 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
           <div className="min-h-0 flex-1 overflow-y-auto p-3 [&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-700">
             {renderGalleryContent()}
           </div>
+        </div>
+      ) : showStarred ? (
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <StarredMessages
+            conversationUserId={user.id}
+            embedded
+            onMessageSelected={() => {
+              setShowStarred(false);
+              onClose();
+            }}
+          />
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 [&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:[background:linear-gradient(to_bottom,#9f20e3,#3B82F6,#00D2D3)]">
@@ -554,16 +616,20 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
               </span>
             </button>
 
-            <div className="group flex cursor-pointer items-center justify-between gap-4 rounded-lg px-4 py-3 hover:bg-white/10">
+            <button
+              type="button"
+              onClick={() => setShowStarred(true)}
+              className="group flex cursor-pointer items-center justify-between gap-4 rounded-lg px-4 py-3 hover:bg-white/10"
+            >
               <span className="flex min-w-0 items-center gap-4">
                 <Star size={22} className="shrink-0 text-indigo-500 group-hover:text-indigo-400" strokeWidth={2} />
                 <span className="truncate text-sm text-gray-300 group-hover:text-white">Starred Messages</span>
               </span>
               <span className="flex shrink-0 items-center gap-1">
-                <span className="text-sm text-gray-400 group-hover:text-white">{user.starredCount ?? "0"}</span>
+                <span className="text-sm text-gray-400 group-hover:text-white">{starredCount ?? "0"}</span>
                 <ChevronRight size={20} className="text-indigo-500 group-hover:text-indigo-400" />
               </span>
-            </div>
+            </button>
 
             <div className="group flex cursor-pointer items-center justify-between gap-4 rounded-lg px-4 py-3 hover:bg-white/10">
               <span className="flex min-w-0 items-center gap-4">
