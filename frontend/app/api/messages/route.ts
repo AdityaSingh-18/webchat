@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const userId = searchParams.get("userId");
     const before = searchParams.get("before");
-    const requestedLimit = Number(searchParams.get("limit") ?? PAGE_SIZE,);
+    const requestedLimit = Number(searchParams.get("limit") ?? PAGE_SIZE);
 
     const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(requestedLimit, MAX_PAGE_SIZE)
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (conversationError) {
-      console.error("Load conversation error:", conversationError,);
+      console.error("Load conversation error:", conversationError);
 
       return NextResponse.json(
         {
@@ -85,13 +85,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const { data: clearState, error: clearStateError } =
-      await supabase
-        .from("conversation_user_state")
-        .select("cleared_at")
-        .eq("conversation_id", conversation.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
+    const { data: clearState, error: clearStateError } = await supabase
+      .from("conversation_user_state")
+      .select("cleared_at")
+      .eq("conversation_id", conversation.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
 
     if (clearStateError) {
       console.error("Load chat clear state error:", clearStateError);
@@ -107,13 +106,13 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
+      .select(
+        "id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at",
+      )
       .eq("conversation_id", conversation.id)
-      .order("created_at", {
-        ascending: false,
-      })
+      .order("created_at", { ascending: false })
       .limit(limit + 1);
-    
+
     if (clearState?.cleared_at) {
       query = query.gt("created_at", clearState.cleared_at);
     }
@@ -123,6 +122,7 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
+
     if (error) {
       console.error("Load messages error:", error);
 
@@ -137,12 +137,61 @@ export async function GET(request: Request) {
 
     const hasMore = data.length > limit;
     const page = data.slice(0, limit).reverse();
-
     const nextCursor = page.length > 0 ? page[0].created_at : null;
+
+    const attachmentsByMessageId = new Map<
+      string,
+      Array<{
+        id: string;
+        message_id: string;
+        conversation_id: string;
+        uploaded_by: string;
+        storage_path: string;
+        file_name: string;
+        mime_type: string;
+        size_bytes: number;
+        created_at: string;
+      }>
+    >();
+
+    if (page.length > 0) {
+      const messageIds = page.map((message) => message.id);
+      const { data: attachmentRows, error: attachmentsError } = await supabase
+        .from("message_attachments")
+        .select(
+          "id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at",
+        )
+        .eq("conversation_id", conversation.id)
+        .in("message_id", messageIds)
+        .order("created_at", { ascending: true });
+
+      if (attachmentsError) {
+        console.error("Load message attachments error:", attachmentsError);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to load message attachments.",
+          },
+          { status: 500 },
+        );
+      }
+
+      for (const attachment of attachmentRows ?? []) {
+        const messageAttachments = attachmentsByMessageId.get(attachment.message_id) ?? [];
+        messageAttachments.push(attachment);
+        attachmentsByMessageId.set(attachment.message_id, messageAttachments);
+      }
+    }
+
+    const messages = page.map((message) => ({
+      ...message,
+      attachments: attachmentsByMessageId.get(message.id) ?? [],
+    }));
 
     return NextResponse.json({
       success: true,
-      messages: page,
+      messages,
       hasMore,
       nextCursor,
     });

@@ -6,7 +6,14 @@ import {
   useRef,
   type ChangeEvent,
 } from "react";
-import { useChatStore, type MessageRecord } from "@/lib/store/chatStore";
+
+import {
+  useChatStore,
+  type MessageAttachmentInput,
+  type MessageRecord,
+} from "@/lib/store/chatStore";
+
+import { supabase } from "@/lib/supabase/supabaseClient";
 
 import {UserDetails, type UserDetailsData} from "@/components/UserDetails";
 import { getInitials } from "@/lib";
@@ -148,6 +155,9 @@ export const ChatWindow = ({
   const [selectedAttachments, setSelectedAttachments] = useState<PendingAttachment[]>([]);
   const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
 
+  const [messageAttachmentUrls, setMessageAttachmentUrls] = useState<Record<string, string>>({});
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
+  
   const currentUser = useChatStore((state) => state.currentUser);
 
   const startTyping = useChatStore((state) => state.startTyping);
@@ -156,6 +166,7 @@ export const ChatWindow = ({
   
   const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const prepareAttachmentUpload = useChatStore((state) => state.prepareAttachmentUpload);
   const prependMessages = useChatStore((state) => state.prependMessages);
   const markMessagesRead = useChatStore((state) => state.markMessagesRead);
   const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
@@ -164,7 +175,7 @@ export const ChatWindow = ({
 
   const isTypingRef = useRef(false);
   const isSendingRef = useRef(false);
-
+  
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
   const initialLoadRef = useRef(true);
@@ -172,7 +183,7 @@ export const ChatWindow = ({
   const lastMessageIdRef = useRef<string | null>(null);
   const activeChatUserIdRef = useRef<string | null>(null);
   const isNearBottomRef = useRef(true);
-
+  
   const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -180,6 +191,7 @@ export const ChatWindow = ({
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   const attachmentPreviewUrlsRef = useRef<Set<string>>(new Set());
+  const attachmentUrlRequestsRef = useRef(new Set<string>());
 
   const BOTTOM_THRESHOLD = 120;
 
@@ -257,29 +269,108 @@ export const ChatWindow = ({
   };
 
   const handleSendMessage = async () => {
-    if (isSendingRef.current) {
+    if (isSendingRef.current || !userId) {
       return;
     }
 
     const inputAtSend = messageInput;
-
     const content = inputAtSend.trim();
-    if (!content || !userId) {
+    const attachmentsToSend = [...selectedAttachments];
+
+    if (!content && attachmentsToSend.length === 0) {
       return;
     }
 
     isSendingRef.current = true;
     setIsSending(true);
-    
     stopTypingForCurrentChat();
 
+    const uploadedStoragePaths: string[] = [];
+    const sentAttachmentIds = new Set(attachmentsToSend.map((attachment) => attachment.id));
+
     try {
-      await sendMessage(userId, content);
+      const attachmentMetadata: MessageAttachmentInput[] = [];
+
+      if (attachmentsToSend.length > 0) {
+        const conversationId = await prepareAttachmentUpload(userId);
+
+        for (const attachment of attachmentsToSend) {
+          const safeFileName = attachment.file.name
+            .normalize("NFKC")
+            .replace(/[^a-zA-Z0-9._-]/g, "_")
+            .slice(0, 150) || "attachment";
+
+          const storagePath = `${conversationId}/${crypto.randomUUID()}-${safeFileName}`;
+          const mimeType = attachment.file.type || "application/octet-stream";
+
+          const { error: uploadError } = await supabase.storage
+            .from("chat-media")
+            .upload(storagePath, attachment.file, {
+              contentType: mimeType,
+              upsert: false,
+            });
+
+          if (uploadError) {
+            throw new Error(
+              `Failed to upload ${attachment.file.name}: ${uploadError.message}`,
+            );
+          }
+
+          uploadedStoragePaths.push(storagePath);
+
+          attachmentMetadata.push({
+            storagePath,
+            fileName: attachment.file.name.slice(0, 255),
+            mimeType,
+            sizeBytes: attachment.file.size,
+          });
+        }
+      }
+
+      await sendMessage(userId, content, attachmentMetadata);
+
       setMessageInput((currentInput) =>
         currentInput === inputAtSend ? "" : currentInput,
       );
+
+      for (const attachment of attachmentsToSend) {
+        URL.revokeObjectURL(attachment.previewUrl);
+        attachmentPreviewUrlsRef.current.delete(attachment.previewUrl);
+      }
+
+      setSelectedAttachments((current) =>
+        current.filter((attachment) => !sentAttachmentIds.has(attachment.id)),
+      );
+
+      setActiveAttachmentId((currentId) =>
+        currentId && !sentAttachmentIds.has(currentId) ? currentId : null,
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send message.");
+      if (uploadedStoragePaths.length > 0) {
+        try {
+          const { error: cleanupError } = await supabase.storage
+            .from("chat-media")
+            .remove(uploadedStoragePaths);
+
+          if (cleanupError) {
+            console.error(
+              "Failed to clean up uploaded attachments:",
+              cleanupError,
+            );
+          }
+        } catch (cleanupError) {
+          console.error(
+            "Failed to clean up uploaded attachments:",
+            cleanupError,
+          );
+        }
+      }
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to send message.",
+      );
     } finally {
       isSendingRef.current = false;
       setIsSending(false);
@@ -351,7 +442,7 @@ export const ChatWindow = ({
 
     input.value = "";
 
-    if (files.length === 0) {
+    if (files.length === 0 || isSendingRef.current) {
       return;
     }
 
@@ -395,6 +486,10 @@ export const ChatWindow = ({
   };
 
   const handleRemoveAttachment = (attachmentId: string) => {
+    if (isSendingRef.current) {
+      return;
+    }
+
     const attachment = selectedAttachments.find(
       (item) => item.id === attachmentId,
     );
@@ -416,6 +511,41 @@ export const ChatWindow = ({
       setActiveAttachmentId(
         remainingAttachments[0]?.id ?? null,
       );
+    }
+  };
+
+  const handleDownloadMessageAttachment = async (
+    attachment: NonNullable<MessageRecord["attachments"]>[number],
+  ) => {
+    setDownloadingAttachmentId(attachment.id);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("chat-media")
+        .createSignedUrl(attachment.storage_path, 60, {
+          download: attachment.file_name,
+        });
+
+      if (error || !data?.signedUrl) {
+        throw new Error(error?.message ?? "Failed to prepare download.");
+      }
+
+      const link = document.createElement("a");
+      link.href = data.signedUrl;
+      link.download = attachment.file_name;
+      link.style.display = "none";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to download attachment.",
+      );
+    } finally {
+      setDownloadingAttachmentId(null);
     }
   };
 
@@ -673,6 +803,42 @@ export const ChatWindow = ({
     };
   }, []);
 
+  useEffect(() => {
+    const attachments = messages.flatMap(
+      (message) => message.attachments ?? [],
+    );
+
+    for (const attachment of attachments) {
+      if (attachmentUrlRequestsRef.current.has(attachment.id)) {
+        continue;
+      }
+
+      attachmentUrlRequestsRef.current.add(attachment.id);
+
+      void (async () => {
+        try {
+          const { data, error } = await supabase.storage
+            .from("chat-media")
+            .createSignedUrl(attachment.storage_path, 60 * 60);
+
+          if (error || !data?.signedUrl) {
+            attachmentUrlRequestsRef.current.delete(attachment.id);
+            console.error("Create attachment preview URL error:", error);
+            return;
+          }
+
+          setMessageAttachmentUrls((current) => ({
+            ...current,
+            [attachment.id]: data.signedUrl,
+          }));
+        } catch (error) {
+          attachmentUrlRequestsRef.current.delete(attachment.id);
+          console.error("Create attachment preview URL error:", error);
+        }
+      })();
+    }
+  }, [messages]);
+
   const activeAttachment = selectedAttachments.find(
     (attachment) => attachment.id === activeAttachmentId) ??
       selectedAttachments[0] ?? null;
@@ -852,7 +1018,104 @@ export const ChatWindow = ({
                                     : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
                                 }`}
                               >
-                                {data.content}
+                                {data.content && (
+                                  <p className="whitespace-pre-wrap break-words">
+                                    {data.content}
+                                  </p>
+                                )}
+
+                                {(data.attachments ?? []).map((attachment) => {
+                                  const previewUrl = messageAttachmentUrls[attachment.id];
+                                  const mimeType = attachment.mime_type.toLowerCase();
+
+                                  const isImage = mimeType.startsWith("image/");
+                                  const isVideo = mimeType.startsWith("video/");
+                                  const isAudio = mimeType.startsWith("audio/");
+
+                                  return (
+                                    <div key={attachment.id} className="mt-3 min-w-0">
+                                      {isImage &&
+                                        (previewUrl ? (
+                                          <img
+                                            src={previewUrl}
+                                            alt={attachment.file_name}
+                                            loading="lazy"
+                                            className="max-h-[180px] max-w-full rounded-lg object-contain"
+                                          />
+                                        ) : (
+                                          <p className="text-xs text-gray-400">
+                                            Loading image preview...
+                                          </p>
+                                        ))}
+
+                                      {isVideo &&
+                                        (previewUrl ? (
+                                          <video
+                                            src={previewUrl}
+                                            controls
+                                            playsInline
+                                            preload="metadata"
+                                            className="max-h-[180px] max-w-full rounded-lg"
+                                          />
+                                        ) : (
+                                          <p className="text-xs text-gray-400">
+                                            Loading video preview...
+                                          </p>
+                                        ))}
+
+                                      {isAudio &&
+                                        (previewUrl ? (
+                                          <audio
+                                            src={previewUrl}
+                                            controls
+                                            preload="metadata"
+                                            className="w-full max-w-[200px]"
+                                          />
+                                        ) : (
+                                          <p className="text-xs text-gray-400">
+                                            Loading audio preview...
+                                          </p>
+                                        ))}
+
+                                      <div className="mt-2 flex min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-black/10 p-2">
+                                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                                          {isImage ? (
+                                            <ImageIcon size={22} className="shrink-0 text-purple-400" />
+                                          ) : isVideo ? (
+                                            <Video size={22} className="shrink-0 text-pink-400" />
+                                          ) : isAudio ? (
+                                            <Music size={22} className="shrink-0 text-orange-400" />
+                                          ) : (
+                                            <FileText size={22} className="shrink-0 text-blue-400" />
+                                          )}
+
+                                          <div className="min-w-0">
+                                            <p
+                                              className="break-all text-xs font-medium text-white"
+                                              title={attachment.file_name}
+                                            >
+                                              {attachment.file_name}
+                                            </p>
+                                            <p className="mt-1 text-[10px] text-gray-400">
+                                              {formatFileSize(attachment.size_bytes)}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleDownloadMessageAttachment(attachment)}
+                                          disabled={downloadingAttachmentId === attachment.id}
+                                          aria-label={`Download ${attachment.file_name}`}
+                                          title="Download file"
+                                          className="shrink-0 rounded-full p-2 text-gray-300 transition hover:bg-white/10 hover:text-cyan-300 disabled:cursor-wait disabled:opacity-50"
+                                        >
+                                          <Download size={18} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
 

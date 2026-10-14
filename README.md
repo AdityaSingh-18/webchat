@@ -135,9 +135,9 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Pre-send previews for selected documents, images, videos, and other files
 - [x] Supabase Storage setup and access policies for chat media
 - [x] Server support for preparing conversations, handling attachment messages, and saving file details securely
-- [ ] Upload and send selected documents and files
-- [ ] Persist and retrieve attachment metadata with message history and realtime updates
-- [ ] Inline image previews and file downloads
+- [x] Upload and send selected documents and files
+- [x] Persist and retrieve attachment metadata with message history and realtime updates
+- [x] Inline image previews and file downloads
 - [ ] **Media, Docs and Links** gallery in the User Info panel, with live counts
 - [ ] Link detection in messages
 
