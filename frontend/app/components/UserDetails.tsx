@@ -496,7 +496,7 @@ export const UserDetails = ({ user, onClose }: UserDetailsProps) => {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-1 transition hover:bg-white/5 hover:text-cyan-500"
+          className="cursor-pointer rounded-full p-1 transition hover:bg-white/5 hover:text-cyan-500"
           aria-label="Close user details"
         >
           <X size={22} strokeWidth={2} />

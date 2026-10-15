@@ -38,6 +38,7 @@ import {
   Download,
   Star,
   CornerUpLeft,
+  Pencil,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -242,7 +243,13 @@ export const ChatWindow = ({
   const [historyReadyUserId, setHistoryReadyUserId] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
+  const [editingMessage, setEditingMessage] = useState<MessageRecord | null>(null);
+  const [openMessageActionsId, setOpenMessageActionsId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MessageRecord | null>(null);
+  const [isMessageActionLoading, setIsMessageActionLoading] = useState(false);
+
   const currentUser = useChatStore((state) => state.currentUser);
+  const socket = useChatStore((state) => state.socket);
   
   const messages = useChatStore((state) => userId ? state.messages[userId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const sendMessage = useChatStore((state) => state.sendMessage);
@@ -257,6 +264,9 @@ export const ChatWindow = ({
   const stopTyping = useChatStore((state) => state.stopTyping);
   const isOtherUserTyping = useChatStore((state) => userId ? state.typingUsers[userId] ?? false : false);
   const isOtherUserOnline = useChatStore((state) => userId ? state.onlineUsers[userId] ?? false : false);
+
+  const updateMessage = useChatStore((state) => state.updateMessage);
+  const markMessageDeletedForMe = useChatStore((state) => state.markMessageDeletedForMe);
   
   const clearConversationMessages = useChatStore((state) => state.clearConversationMessages);
 
@@ -367,6 +377,60 @@ export const ChatWindow = ({
 
   const handleSendMessage = async () => {
     if (isSendingRef.current || !userId) {
+      return;
+    }
+    
+    if (editingMessage) {
+      const content = messageInput.trim();
+
+      if (!content) {
+        toast.error("Message text cannot be empty.");
+        return;
+      }
+
+      isSendingRef.current = true;
+      setIsSending(true);
+      stopTypingForCurrentChat();
+
+      try {
+        const response = await fetch("/api/messages/actions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "edit",
+            messageId: editingMessage.id,
+            content,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.message) {
+          throw new Error(result.error ?? "Failed to edit message.");
+        }
+
+        updateMessage(result.message);
+
+        if (socket?.connected) {
+          socket.emit("sync_message_update", {
+            messageId: result.message.id,
+          });
+        }
+
+        setEditingMessage(null);
+        setMessageInput("");
+        toast.success("Message edited.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to edit message.",
+        );
+      } finally {
+        isSendingRef.current = false;
+        setIsSending(false);
+      }
+
       return;
     }
 
@@ -701,6 +765,77 @@ export const ChatWindow = ({
         ...current,
         [message.id]: false,
       }));
+    }
+  };
+
+  const handleDeleteMessage = async (
+    action: "delete_for_me" | "delete_for_everyone",
+  ) => {
+    if (!deleteTarget || !userId || isMessageActionLoading) {
+      return;
+    }
+
+    const target = deleteTarget;
+    setIsMessageActionLoading(true);
+
+    try {
+      const response = await fetch("/api/messages/actions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action,
+          messageId: target.id,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to delete message.");
+      }
+
+      if (action === "delete_for_me") {
+        markMessageDeletedForMe(target.id);
+        toast.success("Message deleted for you.");
+      } else {
+        if (!result.message) {
+          throw new Error("The deleted message could not be refreshed.");
+        }
+
+        updateMessage(result.message);
+
+        if (socket?.connected) {
+          socket.emit("sync_message_update", {
+            messageId: result.message.id,
+          });
+        }
+
+        toast.success("Message deleted for everyone.");
+      }
+
+      setReplyingTo((current) =>
+        current?.id === target.id ? null : current,
+      );
+
+      setEditingMessage((current) => {
+        if (current?.id === target.id) {
+          setMessageInput("");
+          return null;
+        }
+
+        return current;
+      });
+
+      window.dispatchEvent(new Event("webchat:starred-changed"));
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete message.",
+      );
+    } finally {
+      setIsMessageActionLoading(false);
     }
   };
 
@@ -1358,11 +1493,23 @@ export const ChatWindow = ({
                                     </p>
                                   </div>
                                 )}
-
-                                {data.content && (
-                                  <p className="whitespace-pre-wrap break-words">
-                                    {renderMessageContent(data.content)}
-                                  </p>
+                                
+                                {data.deleted_for_everyone_at ? (
+                                  <div className="px-3 py-2 text-xs italic text-gray-400">
+                                    {data.sender_id === currentUser?.id
+                                      ? "You deleted this message"
+                                      : "This message was deleted"}
+                                  </div>
+                                ) : data.is_deleted_for_me ? (
+                                  <div className="px-3 py-2 text-xs italic text-gray-400">
+                                    You deleted this message
+                                  </div>
+                                ) : (
+                                  data.content && (
+                                    <p className="whitespace-pre-wrap break-words">
+                                      {renderMessageContent(data.content)}
+                                    </p>
+                                  )
                                 )}
 
                                 {(data.attachments ?? []).map((attachment) => {
@@ -1470,6 +1617,10 @@ export const ChatWindow = ({
                                 })}
                               </span>
 
+                              {data.edited_at && (
+                                <span className="text-gray-500">edited</span>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => void handleToggleStar(data)}
@@ -1484,6 +1635,20 @@ export const ChatWindow = ({
                                 }`}
                               >
                                 <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+                              </button>
+                           
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenMessageActionsId((current) =>
+                                    current === data.id ? null : data.id,
+                                  )
+                                }
+                                aria-label="Message actions"
+                                title="Message actions"
+                                className="cursor-pointer rounded p-0.5 text-gray-300 transition-colors hover:text-white"
+                              >
+                                <EllipsisVertical size={14} />
                               </button>
 
                               <button
@@ -1526,6 +1691,45 @@ export const ChatWindow = ({
                                 </span>
                               )}
                             </div>
+                            
+                            {openMessageActionsId === data.id && (
+                              <div className={`mt-1 flex ${me ? "justify-end" : "justify-start"}`}>
+                                <div className="z-20 w-48 overflow-hidden rounded-xl border border-gray-700 bg-[#101d2d] py-1 shadow-xl">
+                                  {me && data.content.trim() && !data.deleted_for_everyone_at && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (selectedAttachments.length > 0) {
+                                          toast.error("Send or remove pending attachments before editing a message.");
+                                          return;
+                                        }
+
+                                        setReplyingTo(null);
+                                        setEditingMessage(data);
+                                        setMessageInput(data.content);
+                                        setOpenMessageActionsId(null);
+                                      }}
+                                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-200 transition hover:bg-white/10"
+                                    >
+                                      <Pencil size={15} />
+                                      Edit message
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDeleteTarget(data);
+                                      setOpenMessageActionsId(null);
+                                    }}
+                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                                  >
+                                    <Trash2 size={15} />
+                                    Delete message
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1724,6 +1928,34 @@ export const ChatWindow = ({
                 </button>
               )}
             </div>
+
+            {editingMessage && (
+              <div className="shrink-0 border-t border-gray-800 bg-[#0a1220] px-4 pt-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border-l-2 border-indigo-400 bg-[#0d1927] px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-indigo-300">
+                      Editing message
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Update your message and save it.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMessage(null);
+                      setMessageInput("");
+                    }}
+                    aria-label="Cancel editing"
+                    title="Cancel editing"
+                    className="shrink-0 rounded-full p-1 text-gray-400 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
             
             {replyingTo && (
               <div className="shrink-0 border-t border-gray-800 bg-[#0a1220] px-4 pt-3">
@@ -1875,12 +2107,70 @@ export const ChatWindow = ({
               </button>
             </div>
           </div>
+          
           {showDetails && user && (
             <UserDetails
               user={user}
               onClose={() => setShowDetails(false)}
             />
           )}
+          
+          {deleteTarget && (
+            <div
+              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-message-title"
+            >
+              <div className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#0d1927] p-5 shadow-2xl">
+                <h3
+                  id="delete-message-title"
+                  className="text-lg font-semibold text-white"
+                >
+                  Delete message?
+                </h3>
+
+                <p className="mt-2 text-sm text-gray-400">
+                  Choose whether to hide this message only for you or remove it for both participants.
+                </p>
+
+                <div className="mt-5 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={isMessageActionLoading}
+                    onClick={() => void handleDeleteMessage("delete_for_me")}
+                    className="w-full rounded-xl border border-gray-700 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    Delete for me
+                  </button>
+
+                  {deleteTarget.sender_id === currentUser?.id &&
+                    !deleteTarget.deleted_for_everyone_at && (
+                      <button
+                        type="button"
+                        disabled={isMessageActionLoading}
+                        onClick={() =>
+                          void handleDeleteMessage("delete_for_everyone")
+                        }
+                        className="w-full rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                      >
+                        Delete for everyone
+                      </button>
+                    )}
+
+                  <button
+                    type="button"
+                    disabled={isMessageActionLoading}
+                    onClick={() => setDeleteTarget(null)}
+                    className="w-full rounded-xl px-4 py-2.5 text-sm font-medium text-gray-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {showClearChatConfirmation && user && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4">
               <div

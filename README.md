@@ -151,7 +151,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] Star and unstar messages
 - [x] **Starred** tab and starred count in the User Info panel
 - [x] Reply to a message
-- [ ] Edit and delete messages (for me / for everyone)
+- [x] Edit and delete messages (for me / for everyone)
 - [ ] Copy and forward messages
 
 ### Phase 8 — Groups ⏳

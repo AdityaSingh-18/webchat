@@ -70,6 +70,9 @@ export interface MessageRecord {
   is_starred?: boolean;
   reply_to_message_id?: string | null;
   reply_to_message?: MessageReplyPreview | null;
+  edited_at?: string | null;
+  deleted_for_everyone_at?: string | null;
+  is_deleted_for_me?: boolean;
 }
 
 export interface StarredMessageJump {
@@ -169,6 +172,8 @@ interface ChatStore {
     isOnline: boolean,
   ) => void;
 
+  removeMessage: (userId: string, messageId: string) => void;
+  markMessageDeletedForMe: (messageId: string) => void;
   clearConversationMessages: (userId: string) => void;
 }
 
@@ -350,9 +355,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         return state;
       }
 
-      const conversationUserId = message.sender_id === currentUserId
-        ? message.receiver_id
-        : message.sender_id;
+      const conversationUserId =
+        message.sender_id === currentUserId
+          ? message.receiver_id
+          : message.sender_id;
 
       const existingMessages = state.messages[conversationUserId];
 
@@ -360,21 +366,39 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         return state;
       }
 
-      const messageExists = existingMessages.some((existingMessage) => existingMessage.id === message.id);
+      let found = false;
 
-      if (!messageExists) {
+      const updatedMessages = existingMessages.map((existingMessage) => {
+        if (existingMessage.id !== message.id) {
+          return existingMessage;
+        }
+
+        found = true;
+
+        const deletedForEveryone = Boolean(
+          message.deleted_for_everyone_at,
+        );
+
+        return {
+          ...existingMessage,
+          ...message,
+          attachments: deletedForEveryone
+            ? []
+            : message.attachments ?? existingMessage.attachments,
+          reply_to_message: deletedForEveryone
+            ? null
+            : message.reply_to_message ?? existingMessage.reply_to_message,
+        };
+      });
+
+      if (!found) {
         return state;
       }
 
       return {
         messages: {
           ...state.messages,
-          [conversationUserId]: existingMessages.map(
-            (existingMessage) =>
-              existingMessage.id === message.id
-                ? { ...existingMessage, ...message }
-                : existingMessage,
-          ),
+          [conversationUserId]: updatedMessages,
         },
       };
     });
@@ -454,6 +478,53 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         pendingStarredMessageJump: null,
       };
     });
+  },
+
+  markMessageDeletedForMe: (messageId) => {
+    set((state) => {
+      let changed = false;
+      const nextMessages: Record<string, MessageRecord[]> = {};
+
+      for (const [conversationUserId, conversationMessages] of Object.entries(
+        state.messages,
+      )) {
+        nextMessages[conversationUserId] = conversationMessages.map(
+          (message) => {
+            if (message.id !== messageId || message.is_deleted_for_me) {
+              return message;
+            }
+
+            changed = true;
+            return {
+              ...message,
+              is_deleted_for_me: true,
+            };
+          },
+        );
+      }
+
+      if (!changed) {
+        return state;
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          ...nextMessages,
+        },
+      };
+    });
+  },
+
+  removeMessage: (userId, messageId) => {
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [userId]: (state.messages[userId] ?? []).filter(
+          (message) => message.id !== messageId,
+        ),
+      },
+    }));
   },
 
   clearConversationMessages: (userId) => {
@@ -561,6 +632,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     socket.on("message_sent", (message: MessageRecord) => {
       get().addMessage(message);
+    });
+
+    socket.on("message_updated", (message: MessageRecord) => {
+      get().updateMessage(message);
     });
 
     set({socket});
@@ -703,6 +778,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         });
 
         get().updateMessage(message);
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "message_user_deletions",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => {
+        const deletion = payload.new as {
+          user_id?: string;
+          message_id?: string;
+        };
+
+        if (
+          deletion.user_id === userId &&
+          typeof deletion.message_id === "string"
+        ) {
+          get().markMessageDeletedForMe(deletion.message_id);
+        }
       },
     )
     .subscribe((status, error) => {

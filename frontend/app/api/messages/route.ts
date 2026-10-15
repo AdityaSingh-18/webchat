@@ -116,10 +116,31 @@ export async function GET(request: Request) {
       );
     }
 
+    const { data: hiddenRows, error: hiddenRowsError } = await supabase
+      .from("message_user_deletions")
+      .select("message_id")
+      .eq("user_id", user.id)
+      .eq("conversation_id", conversation.id);
+
+    if (hiddenRowsError) {
+      console.error("Load hidden messages error:", hiddenRowsError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to load messages.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const hiddenMessageIds = new Set(
+      (hiddenRows ?? []).map((row) => row.message_id),
+    );
+
     let query = supabase
-      .from("messages")
-      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id")
-      .eq("conversation_id", conversation.id)
+      .from("messages")    
+      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id, edited_at, deleted_for_everyone_at")
       .order("created_at", { ascending: false })
       .limit(limit + 1);
 
@@ -145,7 +166,10 @@ export async function GET(request: Request) {
     }
 
     const hasMore = data.length > limit;
-    const page = data.slice(0, limit).reverse();
+    const page = data.slice(0, limit).reverse().map((message) => ({
+      ...message,
+      is_deleted_for_me: hiddenMessageIds.has(message.id),
+    }));
     const messageIds = page.map((message) => message.id);
     const starredMessageIds = new Set<string>();
 
@@ -243,13 +267,14 @@ export async function GET(request: Request) {
           size_bytes: number;
           created_at: string;
         }>;
+        deleted_for_everyone_at: string | null;
       }
     >();
 
     if (replyMessageIds.length > 0) {
       let replyQuery = supabase
         .from("messages")
-        .select("id, conversation_id, sender_id, content, created_at")
+        .select("id, conversation_id, sender_id, content, created_at, deleted_for_everyone_at")
         .eq("conversation_id", conversation.id)
         .in("id", replyMessageIds);
 
@@ -277,9 +302,7 @@ export async function GET(request: Request) {
         visibleReplyIds.length > 0
           ? await supabase
               .from("message_attachments")
-              .select(
-                "id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at",
-              )
+              .select("id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at")
               .eq("conversation_id", conversation.id)
               .in("message_id", visibleReplyIds)
               .order("created_at", { ascending: true })
@@ -316,6 +339,7 @@ export async function GET(request: Request) {
           sender_id: reply.sender_id,
           content: reply.content,
           attachments: replyAttachmentsByMessageId.get(reply.id) ?? [],
+          deleted_for_everyone_at: reply.deleted_for_everyone_at,
         });
       }
     }
@@ -323,7 +347,9 @@ export async function GET(request: Request) {
     const messages = page.map((message) => ({
       ...message,
       is_starred: starredMessageIds.has(message.id),
-      attachments: attachmentsByMessageId.get(message.id) ?? [],
+      attachments: message.deleted_for_everyone_at
+        ? []
+        : attachmentsByMessageId.get(message.id) ?? [],
       reply_to_message: message.reply_to_message_id
         ? replyMessagesById.get(message.reply_to_message_id) ?? null
         : null,

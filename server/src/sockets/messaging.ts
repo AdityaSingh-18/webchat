@@ -57,6 +57,7 @@ export const registerMessagingHandlers = (
 ) => {
   const activeTypingRecipients = new Set<string>();
   const typingEventVersions = new Map<string, number>();
+  const syncMessageUpdateSchema = z.object({messageId: z.string().uuid()});
 
   socket.on("prepare_attachment_upload",
     async (
@@ -228,6 +229,60 @@ export const registerMessagingHandlers = (
       }
     },
   );
+
+  socket.on("sync_message_update", async (payload: unknown) => {
+    const result = syncMessageUpdateSchema.safeParse(payload);
+
+    if (!result.success) {
+      return;
+    }
+
+    const userId = socket.data.userId;
+    const accessToken = socket.data.accessToken;
+
+    if (
+      typeof userId !== "string" ||
+      typeof accessToken !== "string" ||
+      !accessToken
+    ) {
+      return;
+    }
+
+    try {
+      const supabase = createAuthenticatedSupabaseClient(accessToken);
+
+      const { data: message, error } = await supabase
+        .from("messages")
+        .select(
+          "id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id, edited_at, deleted_for_everyone_at",
+        )
+        .eq("id", result.data.messageId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Load updated message for broadcast error:", error);
+        return;
+      }
+
+      if (!message) {
+        return;
+      }
+
+      if (
+        message.sender_id !== userId &&
+        message.receiver_id !== userId
+      ) {
+        return;
+      }
+
+      io
+        .to(getUserRoom(message.sender_id))
+        .to(getUserRoom(message.receiver_id))
+        .emit("message_updated", message);
+    } catch (error) {
+      console.error("Message update broadcast error:", error);
+    }
+  });
 
   socket.on("typing", async (payload: unknown) => {
     const result = typingPayloadSchema.safeParse(payload);
