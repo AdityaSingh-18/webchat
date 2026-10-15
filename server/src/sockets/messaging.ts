@@ -168,7 +168,12 @@ export const registerMessagingHandlers = (
         return;
       }
 
-      const { receiverId, content, attachments } = result.data;
+      const {
+        receiverId,
+        content,
+        attachments,
+        replyToMessageId,
+      } = result.data;
       if (receiverId === socket.data.userId) {
         respond({
           success: false,
@@ -194,6 +199,7 @@ export const registerMessagingHandlers = (
             receiverId,
             content,
             attachments,
+            replyToMessageId,
           },
         });
 

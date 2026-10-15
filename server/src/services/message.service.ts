@@ -13,6 +13,13 @@ export interface MessageAttachmentRecord {
   created_at: string;
 }
 
+export interface MessageReplyPreviewRecord {
+  id: string;
+  sender_id: string;
+  content: string;
+  attachments: MessageAttachmentRecord[];
+}
+
 export interface MessageRecord {
   id: string;
   conversation_id: string;
@@ -24,6 +31,8 @@ export interface MessageRecord {
   delivered_at: string | null;
   read_at: string | null;
   attachments: MessageAttachmentRecord[];
+  reply_to_message_id?: string | null;
+  reply_to_message?: MessageReplyPreviewRecord | null;
 }
 
 interface ConversationParams {
@@ -76,7 +85,6 @@ export const getOrCreateConversation = async ({
   accessToken,
 }: ConversationParams): Promise<string> => {
   const supabase = createAuthenticatedSupabaseClient(accessToken);
-
   return ensureConversation(supabase, senderId, receiverId);
 };
 
@@ -101,6 +109,50 @@ export const createMessage = async ({
       );
     }
   }
+  
+  const replyToMessageId = input.replyToMessageId ?? null;
+  let replyToMessage: MessageReplyPreviewRecord | null = null;
+
+  if (replyToMessageId) {
+    const { data: originalMessage, error: originalMessageError } =
+      await supabase
+        .from("messages")
+        .select("id, conversation_id, sender_id, content")
+        .eq("id", replyToMessageId)
+        .maybeSingle();
+
+    if (originalMessageError || !originalMessage) {
+      throw new Error("The message you are replying to could not be found.", {
+        cause: originalMessageError,
+      });
+    }
+
+    if (originalMessage.conversation_id !== conversationId) {
+      throw new Error(
+        "You can only reply to messages in the current conversation.",
+      );
+    }
+
+    const { data: originalAttachments, error: originalAttachmentsError } = await supabase
+      .from("message_attachments")
+      .select("id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at")
+      .eq("conversation_id", conversationId)
+      .eq("message_id", replyToMessageId)
+      .order("created_at", { ascending: true });
+
+    if (originalAttachmentsError) {
+      throw new Error("Failed to load the message being replied to.", {
+        cause: originalAttachmentsError,
+      });
+    }
+
+    replyToMessage = {
+      id: originalMessage.id,
+      sender_id: originalMessage.sender_id,
+      content: originalMessage.content,
+      attachments: (originalAttachments ?? []) as MessageAttachmentRecord[],
+    };
+  }
 
   const { data: message, error: messageError } = await supabase
     .from("messages")
@@ -109,8 +161,9 @@ export const createMessage = async ({
       sender_id: senderId,
       receiver_id: input.receiverId,
       content: input.content,
+      reply_to_message_id: replyToMessageId,
     })
-    .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id")
     .single();
 
   if (messageError || !message) {
@@ -120,7 +173,6 @@ export const createMessage = async ({
   }
 
   let savedAttachments: MessageAttachmentRecord[] = [];
-
   if (attachments.length > 0) {
     const attachmentRows = attachments.map((attachment) => ({
       message_id: message.id,
@@ -159,5 +211,6 @@ export const createMessage = async ({
   return {
     ...message,
     attachments: savedAttachments,
+    reply_to_message: replyToMessage,
   };
 };

@@ -4,6 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 const PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 50;
 
+type ReplyAttachmentRow = {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  uploaded_by: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+};
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -106,7 +118,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at")
+      .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
@@ -206,10 +218,115 @@ export async function GET(request: Request) {
       }
     }
 
+    const replyMessageIds = Array.from(
+      new Set(
+        page
+          .map((message) => message.reply_to_message_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    const replyMessagesById = new Map<
+      string,
+      {
+        id: string;
+        sender_id: string;
+        content: string;
+        attachments: Array<{
+          id: string;
+          message_id: string;
+          conversation_id: string;
+          uploaded_by: string;
+          storage_path: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          created_at: string;
+        }>;
+      }
+    >();
+
+    if (replyMessageIds.length > 0) {
+      let replyQuery = supabase
+        .from("messages")
+        .select("id, conversation_id, sender_id, content, created_at")
+        .eq("conversation_id", conversation.id)
+        .in("id", replyMessageIds);
+
+      if (clearState?.cleared_at) {
+        replyQuery = replyQuery.gt("created_at", clearState.cleared_at);
+      }
+
+      const { data: replyRows, error: replyRowsError } = await replyQuery;
+
+      if (replyRowsError) {
+        console.error("Load reply previews error:", replyRowsError);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to load reply previews.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const visibleReplyIds = (replyRows ?? []).map((row) => row.id);
+
+      const { data: replyAttachmentRows, error: replyAttachmentsError } =
+        visibleReplyIds.length > 0
+          ? await supabase
+              .from("message_attachments")
+              .select(
+                "id, message_id, conversation_id, uploaded_by, storage_path, file_name, mime_type, size_bytes, created_at",
+              )
+              .eq("conversation_id", conversation.id)
+              .in("message_id", visibleReplyIds)
+              .order("created_at", { ascending: true })
+          : { data: [], error: null };
+
+      if (replyAttachmentsError) {
+        console.error("Load reply attachments error:", replyAttachmentsError);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to load reply attachments.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const replyAttachmentsByMessageId = new Map<
+        string,
+        ReplyAttachmentRow[]
+      >();
+
+      for (const attachment of replyAttachmentRows ?? []) {
+        const existing =
+          replyAttachmentsByMessageId.get(attachment.message_id) ?? [];
+
+        existing.push(attachment);
+        replyAttachmentsByMessageId.set(attachment.message_id, existing);
+      }
+
+      for (const reply of replyRows ?? []) {
+        replyMessagesById.set(reply.id, {
+          id: reply.id,
+          sender_id: reply.sender_id,
+          content: reply.content,
+          attachments: replyAttachmentsByMessageId.get(reply.id) ?? [],
+        });
+      }
+    }
+
     const messages = page.map((message) => ({
       ...message,
       is_starred: starredMessageIds.has(message.id),
       attachments: attachmentsByMessageId.get(message.id) ?? [],
+      reply_to_message: message.reply_to_message_id
+        ? replyMessagesById.get(message.reply_to_message_id) ?? null
+        : null,
     }));
 
     return NextResponse.json({

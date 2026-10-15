@@ -150,7 +150,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 
 - [x] Star and unstar messages
 - [x] **Starred** tab and starred count in the User Info panel
-- [ ] Reply to a message
+- [x] Reply to a message
 - [ ] Edit and delete messages (for me / for everyone)
 - [ ] Copy and forward messages
 
@@ -183,7 +183,7 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [ ] Schema-based request validation in API routes (for example, Zod)
 - [ ] Display user-load errors in the chat window
 - [ ] Replace placeholder entries in the chat-list options menu
-- [ ] UI cleanup: consistent initials fallback, profile-label cleanup, and rename `OptInput.tsx` to `OtpInput.tsx`
+- [ ] UI cleanup: consistent initials fallback, profile-label cleanup
 - [ ] Responsive / mobile layout
 - [ ] Accessibility pass: labels, focus states, and keyboard navigation
 - [ ] Automated unit and end-to-end tests plus CI (lint, type-check, build)

@@ -15,6 +15,7 @@ export const sendMessageSchema = z
     receiverId: z.uuid(),
     content: z.string().trim().max(5000).optional(),
     attachments: z.array(attachmentSchema).max(20).optional(),
+    replyToMessageId: z.uuid().optional(),
   })
   .transform((value, ctx) => {
     const content = value.content ?? "";

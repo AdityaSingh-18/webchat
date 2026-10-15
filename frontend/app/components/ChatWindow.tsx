@@ -37,6 +37,7 @@ import {
   Contact,
   Download,
   Star,
+  CornerUpLeft,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -209,6 +210,7 @@ export const ChatWindow = ({
 }: ChatWindowProps) => {
   const [messageInput, setMessageInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<MessageRecord | null>(null);
 
   const [starOverrides, setStarOverrides] = useState<Record<string, boolean>>({});
   const [starLoadingIds, setStarLoadingIds] = useState<Record<string, boolean>>({});
@@ -371,6 +373,7 @@ export const ChatWindow = ({
     const inputAtSend = messageInput;
     const content = inputAtSend.trim();
     const attachmentsToSend = [...selectedAttachments];
+    const replyAtSend = replyingTo;
 
     if (!content && attachmentsToSend.length === 0) {
       return;
@@ -422,7 +425,16 @@ export const ChatWindow = ({
         }
       }
 
-      await sendMessage(userId, content, attachmentMetadata);
+      await sendMessage(
+        userId,
+        content,
+        attachmentMetadata,
+        replyAtSend?.id,
+      );
+
+      setReplyingTo((current) =>
+        current?.id === replyAtSend?.id ? null : current,
+      );
 
       setMessageInput((currentInput) =>
         currentInput === inputAtSend ? "" : currentInput,
@@ -461,10 +473,9 @@ export const ChatWindow = ({
         }
       }
 
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to send message.",
+      toast.error(error instanceof Error
+        ? error.message
+        : "Failed to send message.",
       );
     } finally {
       isSendingRef.current = false;
@@ -1104,6 +1115,10 @@ export const ChatWindow = ({
   }, []);
 
   useEffect(() => {
+    setReplyingTo(null);
+  }, [userId]);
+
+  useEffect(() => {
     const attachments = messages.flatMap(
       (message) => message.attachments ?? [],
     );
@@ -1326,6 +1341,24 @@ export const ChatWindow = ({
                                     : "rounded-tr-xl rounded-br-xl bg-gradient-to-l from-purple-500/50 to-transparent"
                                 }`}
                               >
+                                {data.reply_to_message && (
+                                  <div className="mb-2 rounded-lg border-l-2 border-cyan-300 bg-black/20 px-3 py-2">
+                                    <p className="text-[11px] font-semibold text-cyan-200">
+                                      {data.reply_to_message.sender_id === currentUser?.id
+                                        ? "You"
+                                        : user?.username || "Contact"}
+                                    </p>
+
+                                    <p className="mt-1 break-words text-xs text-gray-300">
+                                      {data.reply_to_message.content?.trim() ||
+                                        data.reply_to_message.attachments?.[0]?.file_name ||
+                                        (data.reply_to_message.attachments?.length
+                                          ? `${data.reply_to_message.attachments.length} attachments`
+                                          : "Message unavailable")}
+                                    </p>
+                                  </div>
+                                )}
+
                                 {data.content && (
                                   <p className="whitespace-pre-wrap break-words">
                                     {renderMessageContent(data.content)}
@@ -1447,10 +1480,20 @@ export const ChatWindow = ({
                                 className={`cursor-pointer rounded p-0.5 transition-colors disabled:cursor-wait disabled:opacity-50 ${
                                   isStarred
                                     ? "text-yellow-300"
-                                    : "text-gray-500 hover:text-yellow-300"
+                                    : "text-gray-300 hover:text-yellow-300"
                                 }`}
                               >
                                 <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setReplyingTo(data)}
+                                aria-label="Reply to message"
+                                title="Reply to message"
+                                className="cursor-pointer rounded p-0.5 text-gray-300 transition-colors hover:text-cyan-300"
+                              >
+                                <CornerUpLeft size={14} />
                               </button>
 
                               {me && (
@@ -1681,6 +1724,40 @@ export const ChatWindow = ({
                 </button>
               )}
             </div>
+            
+            {replyingTo && (
+              <div className="shrink-0 border-t border-gray-800 bg-[#0a1220] px-4 pt-3">
+                <div className="flex items-start justify-between gap-3 rounded-xl border-l-2 border-cyan-400 bg-[#0d1927] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-cyan-300">
+                      Replying to{" "}
+                      {replyingTo.sender_id === currentUser?.id
+                        ? "yourself"
+                        : user?.username || "Contact"}
+                    </p>
+
+                    <p className="mt-1 line-clamp-2 break-words text-sm text-gray-200">
+                      {replyingTo.content?.trim() ||
+                        replyingTo.attachments?.[0]?.file_name ||
+                        (replyingTo.attachments?.length
+                          ? `${replyingTo.attachments.length} attachments`
+                          : "Message unavailable")}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    aria-label="Cancel reply"
+                    title="Cancel reply"
+                    className="shrink-0 rounded-full cursor-pointer p-1 text-gray-300 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="shrink-0 flex gap-3 p-4 bg-[#0a1220] border-t-2 border-gray-800">
               <div className="relative shrink-0" ref={attachmentMenuRef}>
                 <input
@@ -1782,9 +1859,10 @@ export const ChatWindow = ({
                     void handleSendMessage();
                   }
                 }}
-                className="flex-1 px-3 py-2 placeholder:text-gray-400 text-white bg-[#0d1927] focus:bg-gray-800 outline-none border border-gray-800 rounded-2xl"
+                className="flex-1 px-3 py-2 placeholder:text-gray-300 text-white bg-[#0d1927] focus:bg-gray-800 outline-none border border-gray-800 rounded-2xl"
                 placeholder="Write a message..."
               />
+
               <button 
                 onClick={handleSendMessage}
                 disabled={isSending} 

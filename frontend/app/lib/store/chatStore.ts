@@ -49,6 +49,13 @@ interface PrepareAttachmentUploadResponse {
   error?: string;
 }
 
+export interface MessageReplyPreview {
+  id: string;
+  sender_id: string;
+  content: string;
+  attachments?: MessageAttachmentRecord[];
+}
+
 export interface MessageRecord {
   id: string;
   conversation_id: string;
@@ -61,6 +68,8 @@ export interface MessageRecord {
   read_at: string | null;
   attachments?: MessageAttachmentRecord[];
   is_starred?: boolean;
+  reply_to_message_id?: string | null;
+  reply_to_message?: MessageReplyPreview | null;
 }
 
 export interface StarredMessageJump {
@@ -118,10 +127,12 @@ interface ChatStore {
     receiverId: string,
   ) => Promise<string>;
 
+  
   sendMessage: (
     receiverId: string,
     content: string,
     attachments?: MessageAttachmentInput[],
+    replyToMessageId?: string | null,
   ) => Promise<MessageRecord>;
 
   prependMessages: (
@@ -606,7 +617,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
-  sendMessage: (receiverId, content, attachments = []) => {
+  sendMessage: (
+    receiverId,
+    content,
+    attachments = [],
+    replyToMessageId,
+  ) => {
     const socket = get().socket;
 
     if (!socket || !socket.connected) {
@@ -615,7 +631,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     return new Promise((resolve, reject) => {
       socket.timeout(5000).emit("send_message",
-        {receiverId, content, attachments},
+        {receiverId, content, attachments, replyToMessageId},
           (
             error: Error | null,
             response: {
