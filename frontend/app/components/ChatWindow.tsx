@@ -39,6 +39,8 @@ import {
   Star,
   CornerUpLeft,
   Pencil,
+  Copy,
+  Forward as ForwardIcon,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -87,6 +89,14 @@ type PendingAttachment = {
 
 type ChatWindowProps = {
   userId: string | null;
+};
+
+type ForwardContact = {
+  id: string;
+  full_name: string;
+  username: string;
+  avatar_url: string | null;
+  display_name: string;
 };
 
 const EMPTY_MESSAGES: MessageRecord[] = [];
@@ -247,6 +257,13 @@ export const ChatWindow = ({
   const [openMessageActionsId, setOpenMessageActionsId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MessageRecord | null>(null);
   const [isMessageActionLoading, setIsMessageActionLoading] = useState(false);
+
+  const [forwardTarget, setForwardTarget] = useState<MessageRecord | null>(null);
+  const [forwardContacts, setForwardContacts] = useState<ForwardContact[]>([]);
+  const [forwardRecipients, setForwardRecipients] = useState<string[]>([]);
+  const [forwardSearch, setForwardSearch] = useState("");
+  const [forwardContactsLoading, setForwardContactsLoading] = useState(false);
+  const [isForwarding, setIsForwarding] = useState(false);
 
   const currentUser = useChatStore((state) => state.currentUser);
   const socket = useChatStore((state) => state.socket);
@@ -765,6 +782,213 @@ export const ChatWindow = ({
         ...current,
         [message.id]: false,
       }));
+    }
+  };
+
+  const handleCopyMessage = async (message: MessageRecord) => {
+    setOpenMessageActionsId(null);
+
+    if (
+      message.deleted_for_everyone_at ||
+      message.is_deleted_for_me ||
+      !message.content.trim()
+    ) {
+      toast.error("This message cannot be copied.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(message.content);
+      toast.success("Message copied.");
+    } catch (error) {
+      console.error("Copy message error:", error);
+
+      toast.error("Failed to copy message. Check clipboard permissions.");
+    }
+  };
+
+  const handleOpenForwardModal = async (message: MessageRecord) => {
+    if (
+      message.deleted_for_everyone_at ||
+      message.is_deleted_for_me
+    ) {
+      toast.error("This message cannot be forwarded.");
+      return;
+    }
+
+    setOpenMessageActionsId(null);
+    setForwardTarget(message);
+    setForwardRecipients([]);
+    setForwardSearch("");
+    setForwardContactsLoading(true);
+
+    try {
+      const response = await fetch("/api/connections/accepted", {
+        cache: "no-store",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to load contacts.");
+      }
+
+      setForwardContacts(result.contacts ?? []);
+    } catch (error) {
+      setForwardTarget(null);
+
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load contacts.",
+      );
+    } finally {
+      setForwardContactsLoading(false);
+    }
+  };
+
+  const handleForwardMessage = async () => {
+    const target = forwardTarget;
+
+    if (
+      !target ||
+      forwardRecipients.length === 0 ||
+      isForwarding
+    ) {
+      return;
+    }
+
+    if (
+      target.deleted_for_everyone_at ||
+      target.is_deleted_for_me
+    ) {
+      toast.error("This message cannot be forwarded.");
+      setForwardTarget(null);
+      return;
+    }
+
+    const selectedContacts = forwardContacts.filter((contact) =>
+      forwardRecipients.includes(contact.id),
+    );
+
+    const sourceAttachments = target.attachments ?? [];
+    const content = target.content ?? "";
+
+    if (!content.trim() && sourceAttachments.length === 0) {
+      toast.error("This message has no content to forward.");
+      return;
+    }
+
+    setIsForwarding(true);
+
+    let successCount = 0;
+    const failedContacts: string[] = [];
+
+    try {
+      for (const contact of selectedContacts) {
+        const uploadedPaths: string[] = [];
+
+        try {
+          const attachmentMetadata: MessageAttachmentInput[] = [];
+
+          if (sourceAttachments.length > 0) {
+            const conversationId = await prepareAttachmentUpload(contact.id);
+
+            for (const attachment of sourceAttachments) {
+              const { data: file, error: downloadError } = await supabase.storage
+                .from("chat-media")
+                .download(attachment.storage_path);
+
+              if (downloadError || !file) {
+                throw new Error(
+                  `Failed to download ${attachment.file_name}.`,
+                );
+              }
+
+              const safeFileName = attachment.file_name
+                .normalize("NFKC")
+                .replace(/[^a-zA-Z0-9._-]/g, "_")
+                .slice(0, 150) || "attachment";
+
+              const storagePath =
+                `${conversationId}/${crypto.randomUUID()}-${safeFileName}`;
+
+              const mimeType =
+                attachment.mime_type ||
+                file.type ||
+                "application/octet-stream";
+
+              const { error: uploadError } = await supabase.storage
+                .from("chat-media")
+                .upload(storagePath, file, {
+                  contentType: mimeType,
+                  upsert: false,
+                });
+
+              if (uploadError) {
+                throw new Error(
+                  `Failed to forward ${attachment.file_name}.`,
+                );
+              }
+
+              uploadedPaths.push(storagePath);
+
+              attachmentMetadata.push({
+                storagePath,
+                fileName: attachment.file_name.slice(0, 255),
+                mimeType,
+                sizeBytes: file.size,
+              });
+            }
+          }
+
+          await sendMessage(
+            contact.id,
+            content,
+            attachmentMetadata,
+          );
+
+          successCount += 1;
+        } catch (error) {
+          console.error(
+            `Forward message to ${contact.id} error:`,
+            error,
+          );
+
+          if (uploadedPaths.length > 0) {
+            const { error: cleanupError } = await supabase.storage
+              .from("chat-media")
+              .remove(uploadedPaths);
+
+            if (cleanupError) {
+              console.error(
+                "Failed to clean up forwarded attachments:",
+                cleanupError,
+              );
+            }
+          }
+
+          failedContacts.push(contact.display_name || contact.username);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(
+          `Message forwarded to ${successCount} ${
+            successCount === 1 ? "contact" : "contacts"
+          }.`,
+        );
+
+        setForwardTarget(null);
+        setForwardRecipients([]);
+        setForwardSearch("");
+      }
+
+      if (failedContacts.length > 0) {
+        toast.error(
+          `Couldn't forward to: ${failedContacts.join(", ")}.`,
+        );
+      }
+    } finally {
+      setIsForwarding(false);
     }
   };
 
@@ -1293,6 +1517,17 @@ export const ChatWindow = ({
     (attachment) => attachment.id === activeAttachmentId) ??
       selectedAttachments[0] ?? null;
 
+  const filteredForwardContacts = forwardContacts.filter((contact) => {
+    const search = forwardSearch.trim().toLowerCase();
+
+    return (
+      !search ||
+      `${contact.display_name} ${contact.username}`
+        .toLowerCase()
+        .includes(search)
+    );
+  });
+
   return (
     <>
       {!userId ?
@@ -1695,6 +1930,31 @@ export const ChatWindow = ({
                             {openMessageActionsId === data.id && (
                               <div className={`mt-1 flex ${me ? "justify-end" : "justify-start"}`}>
                                 <div className="z-20 w-48 overflow-hidden rounded-xl border border-gray-700 bg-[#101d2d] py-1 shadow-xl">
+                                  {!data.deleted_for_everyone_at &&
+                                  !data.is_deleted_for_me &&
+                                  data.content.trim() && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleCopyMessage(data)}
+                                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-200 transition hover:bg-white/10"
+                                    >
+                                      <Copy size={15} />
+                                      Copy message
+                                    </button>
+                                  )}
+
+                                {!data.deleted_for_everyone_at &&
+                                  !data.is_deleted_for_me &&
+                                  (data.content.trim() || (data.attachments?.length ?? 0) > 0) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleOpenForwardModal(data)}
+                                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-200 transition hover:bg-white/10"
+                                    >
+                                      <ForwardIcon size={15} />
+                                      Forward message
+                                    </button>
+                                  )}
                                   {me && data.content.trim() && !data.deleted_for_everyone_at && (
                                     <button
                                       type="button"
@@ -2166,6 +2426,157 @@ export const ChatWindow = ({
                   >
                     Cancel
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {forwardTarget && (
+            <div
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="forward-message-title"
+            >
+              <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-700 bg-[#0d1927] shadow-2xl">
+                <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+                  <div>
+                    <h3
+                      id="forward-message-title"
+                      className="text-lg font-semibold text-white"
+                    >
+                      Forward message
+                    </h3>
+
+                    <p className="mt-1 text-xs text-gray-400">
+                      Select one or more contacts.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setForwardTarget(null)}
+                    disabled={isForwarding}
+                    aria-label="Close forwarding dialog"
+                    className="rounded-full p-2 text-gray-400 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="border-b border-gray-800 p-4">
+                  <input
+                    type="text"
+                    value={forwardSearch}
+                    onChange={(event) => setForwardSearch(event.target.value)}
+                    placeholder="Search contacts..."
+                    aria-label="Search contacts"
+                    disabled={isForwarding}
+                    className="w-full rounded-xl border border-gray-700 bg-[#101d2d] px-3 py-2.5 text-sm text-white outline-none placeholder:text-gray-500 focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                  {forwardContactsLoading ? (
+                    <p className="p-6 text-center text-sm text-gray-400">
+                      Loading contacts...
+                    </p>
+                  ) : filteredForwardContacts.length === 0 ? (
+                    <p className="p-6 text-center text-sm text-gray-400">
+                      {forwardContacts.length === 0
+                        ? "No accepted contacts available."
+                        : "No contacts match your search."}
+                    </p>
+                  ) : (
+                    filteredForwardContacts.map((contact) => {
+                      const selected = forwardRecipients.includes(contact.id);
+                      const name = contact.display_name || contact.username;
+
+                      return (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          disabled={isForwarding}
+                          aria-pressed={selected}
+                          onClick={() => {
+                            setForwardRecipients((current) =>
+                              current.includes(contact.id)
+                                ? current.filter((id) => id !== contact.id)
+                                : [...current, contact.id],
+                            );
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
+                            selected
+                              ? "bg-cyan-500/10 ring-1 ring-cyan-400/50"
+                              : "hover:bg-white/5"
+                          } disabled:opacity-50`}
+                        >
+                          {contact.avatar_url ? (
+                            <img
+                              src={contact.avatar_url}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] text-sm font-semibold text-white">
+                              {getInitials(name)}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-white">
+                              {name}
+                            </p>
+
+                            <p className="truncate text-xs text-gray-400">
+                              @{contact.username}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                              selected
+                                ? "border-cyan-400 bg-cyan-400 text-gray-950"
+                                : "border-gray-600"
+                            }`}
+                          >
+                            {selected && <Check size={14} />}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-gray-800 p-4">
+                  <span className="text-xs text-gray-400">
+                    {forwardRecipients.length} selected
+                  </span>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={isForwarding}
+                      onClick={() => setForwardTarget(null)}
+                      className="rounded-xl px-4 py-2.5 text-sm text-gray-300 transition hover:bg-white/5 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        isForwarding ||
+                        forwardContactsLoading ||
+                        forwardRecipients.length === 0
+                      }
+                      onClick={() => void handleForwardMessage()}
+                      className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#9f20e3] via-[#3B82F6] to-[#00D2D3] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ForwardIcon size={15} />
+                      {isForwarding ? "Forwarding..." : "Forward"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

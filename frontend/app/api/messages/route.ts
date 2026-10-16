@@ -139,8 +139,9 @@ export async function GET(request: Request) {
     );
 
     let query = supabase
-      .from("messages")    
+      .from("messages")
       .select("id, conversation_id, sender_id, receiver_id, content, is_read, created_at, delivered_at, read_at, reply_to_message_id, edited_at, deleted_for_everyone_at")
+      .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
 

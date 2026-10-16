@@ -72,8 +72,8 @@ This README doubles as the project's progress tracker. Update the relevant check
 | 4 | Chat UI shell | ✅ Done |
 | 5 | Real-time 1:1 messaging | ✅ Done |
 | 6 | Media & attachments | ✅ Done |
-| 7 | Starred & message actions | 🚧 In progress |
-| 8 | Groups | ⏳ Planned |
+| 7 | Starred & message actions | ✅ Done |
+| 8 | Groups | 🚧 In progress |
 | 9 | Account, privacy & settings | ⏳ Planned |
 | 10 | Quality, security & deployment | ⏳ Planned |
 
@@ -146,15 +146,15 @@ This README doubles as the project's progress tracker. Update the relevant check
 - [x] **Media, Docs and Links** gallery in the User Info panel, with live counts
 - [x] Link detection in messages
 
-### Phase 7 — Starred & message actions 🚧
+### Phase 7 — Starred & message actions ✅
 
 - [x] Star and unstar messages
 - [x] **Starred** tab and starred count in the User Info panel
 - [x] Reply to a message
 - [x] Edit and delete messages (for me / for everyone)
-- [ ] Copy and forward messages
+- [x] Copy and forward messages
 
-### Phase 8 — Groups ⏳
+### Phase 8 — Groups 🚧
 
 - [ ] Create a group with a name, photo, and members selected from connections
 - [ ] Real-time group messaging
